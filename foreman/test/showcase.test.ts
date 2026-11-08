@@ -61,7 +61,7 @@ describe('sim showcase states', () => {
       rowan: 'error@library',
       tove: 'editing@desk',
     });
-    const t7 = h.fm.tasks.list().find((t) => t.title.startsWith('Publish'))!;
+    const t7 = h.fm.tasks.list().find((t) => t.title.includes('0.3.0'))!;
     expect(t7.status).toBe('blocked');
     expect(t7.assignee).toBe('wren');
     // four branches merged for real on the way here

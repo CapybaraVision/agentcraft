@@ -72,13 +72,24 @@ test('Minecraft lang files cover the same keys and Korean UI strings are Korean'
   const en = JSON.parse(fs.readFileSync(path.join(dir, 'en_us.json'), 'utf8'));
   const ko = JSON.parse(fs.readFileSync(path.join(dir, 'ko_kr.json'), 'utf8'));
   assert.deepEqual(Object.keys(en), Object.keys(ko));
-  for (const key of ['agentcraft.screen.console', 'agentcraft.ui.merge', 'agentcraft.console.placeholder', 'block.agentcraft.task_board', 'key.agentcraft.decisions']) {
+  for (const key of ['agentcraft.screen.console', 'agentcraft.ui.merge', 'agentcraft.console.placeholder', 'block.agentcraft.task_board', 'key.agentcraft.decisions', 'agentcraft.hud.doing', 'agentcraft.hud.waiting_press', 'agentcraft.plate.question', 'agentcraft.hud.decisions_n', 'agentcraft.plate.failing_n']) {
     assert.match(ko[key], /[가-힣]/, key);
     assert.notEqual(ko[key], en[key], key);
   }
   assert.match(en['agentcraft.console.placeholder'], /\/help/);
   assert.match(ko['agentcraft.console.placeholder'], /\/help/);
   assert.equal(en['key.category.agentcraft.agentcraft'], 'AgentCraft');
+  assert.equal(en['agentcraft.hud.doing'], 'doing');
+  assert.equal(en['agentcraft.hud.review'], 'review');
+  assert.equal(en['agentcraft.hud.todo'], 'todo');
+  assert.equal(en['agentcraft.hud.blocked'], 'blocked');
+  assert.equal(en['agentcraft.hud.done_ratio'], '%s/%s done');
+  assert.equal(en['agentcraft.hud.waiting_press'], '%s waiting · press');
+  assert.equal(en['agentcraft.plate.question'], 'question for you');
+  assert.equal(en['agentcraft.hud.decisions_n'], '%s decisions waiting');
+  assert.equal(en['agentcraft.plate.failing_n'], '%s failing');
+  assert.match(ko['agentcraft.hud.waiting_press'], /%s/);
+  assert.match(ko['agentcraft.plate.failing_n'], /%s/);
   const template = fs.readFileSync(path.join(root, 'mod', 'run-template', 'options.txt'), 'utf8');
   assert.match(template, /^lang:ko_kr$/m);
 });

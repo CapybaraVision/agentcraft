@@ -944,13 +944,13 @@ final class TaskBoard {
 			hint = t.id(); // the reason has its own lines above the footer
 		} else if (blocked) {
 			String why = t.blockedReason() == null ? "" : t.blockedReason().replace("`", "").strip();
-			hint = why.isEmpty() ? "blocked" : why;
+			hint = why.isEmpty() ? dev.agentcraft.client.ui.UiText.or("agentcraft.hud.blocked", "blocked") : why;
 			hintColor = error;
 		} else if (yours != null) {
 			hint = yours;
 			hintColor = UiStyle.CLAY_DARK;
 		} else if (t.ci() == CiStatus.FAIL && !done) {
-			hint = "CI failing";
+			hint = dev.agentcraft.client.ui.UiText.or("agentcraft.hud.ci_failing", "CI failing");
 			hintColor = error;
 		} else if (!pending.isEmpty() && !done) {
 			hint = "after " + String.join(", ", pending);

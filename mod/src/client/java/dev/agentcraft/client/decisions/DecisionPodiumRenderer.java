@@ -106,7 +106,9 @@ public class DecisionPodiumRenderer extends StationRenderer<DecisionPodiumBlockE
 		Cache c = cache;
 		if (c == null || c.revision() != s.foremanRevision || !c.decisionId().equals(d.id()) || c.count() != s.count) {
 			Font font = Minecraft.getInstance().font;
-			String header = s.count == 1 ? "1 decision waiting" : s.count + " decisions waiting";
+			String header = s.count == 1
+				? dev.agentcraft.client.ui.UiText.or("agentcraft.hud.decision_one", "1 decision waiting")
+				: dev.agentcraft.client.ui.UiText.or("agentcraft.hud.decisions_n", s.count + " decisions waiting", s.count);
 			String name = UiBits.agentName(d.agentId());
 			String kind = " · " + DecisionQueue.kindLabel(d.kind());
 			int inner = W - 16;

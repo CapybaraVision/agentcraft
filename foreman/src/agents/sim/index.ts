@@ -4,7 +4,7 @@ import { ClientError, type Backend, type Foreman } from '../../foreman.js';
 import type { Decision, Goal, Task } from '../../protocol.js';
 import { truncate } from '../../util/text.js';
 import { SimDirector, Stopped, type SimState } from './director.js';
-import { BEATS, DEFAULT_SIM_GOAL } from './scenario.js';
+import { BEATS, currentSimGoal } from './scenario.js';
 import { userName } from '../../user.js';
 
 const CANNED_REPLIES = [
@@ -62,7 +62,7 @@ export class SimBackend implements Backend {
   /** Called by main when --autostart/--showcase and no scenario has run yet. */
   async autostart(text?: string): Promise<Goal | undefined> {
     if (this.state.goalId) return undefined;
-    return this.fm.submitGoal(text ?? DEFAULT_SIM_GOAL);
+    return this.fm.submitGoal(text ?? currentSimGoal());
   }
 
   async submitGoal(goal: Goal): Promise<void> {

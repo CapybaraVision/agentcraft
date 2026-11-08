@@ -291,7 +291,7 @@ public class TaskScreen extends Screen {
 		// ---- CI + branch
 		String ci = switch (t.ci()) {
 			case PASS -> "passing";
-			case FAIL -> "failing";
+			case FAIL -> dev.agentcraft.client.ui.UiText.or("agentcraft.plate.failing", "failing");
 			case RUNNING -> "running";
 			default -> "not run";
 		};

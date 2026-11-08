@@ -114,7 +114,7 @@ public final class Nameplate {
 		Kit.Padding pad = Kit.padding("nameplate");
 		// the activity wraps to a second line before it is ever cut ("outlining the Tags docs");
 		// a question waiting for you is shown in full by the podium bubble, so the plate just says so
-		String shown = act.startsWith("asking you") ? "question for you" : act.replace("`", "");
+		String shown = dev.agentcraft.client.ui.UiText.plateActivity(act);
 		String activity = "";
 		String activity2 = "";
 		if (!compact && !shown.isEmpty()) {

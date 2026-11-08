@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createTeam } from './agents/teams.js';
 import { SimBackend } from './agents/sim/index.js';
-import { DEFAULT_SIM_GOAL } from './agents/sim/scenario.js';
+import { currentSimGoal } from './agents/sim/scenario.js';
 import { FOREMAN_VERSION, helpText, loadConfig, type Config } from './config.js';
 import { t } from './locale.js';
 import { consoleLogger } from './context.js';
@@ -109,7 +109,7 @@ export async function main(argv: string[]): Promise<void> {
 
   await foreman.start(backend);
   if (backend instanceof SimBackend && (cfg.autostart || cfg.goal)) {
-    await backend.autostart(cfg.goal ?? DEFAULT_SIM_GOAL);
+    await backend.autostart(cfg.goal ?? currentSimGoal());
   } else if (cfg.goal) {
     await foreman.submitGoal(cfg.goal).catch((e) => log.error(t('goal_fail', { message: (e as Error).message })));
   }

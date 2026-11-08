@@ -24,4 +24,22 @@ public final class UiText {
 		}
 		return value;
 	}
+
+	/**
+	 * Nameplate activity. Fixed sim phrases are translated; everything else, including a goal
+	 * or command the user typed, is shown as stored (backticks stripped).
+	 */
+	public static String plateActivity(String act) {
+		if (act.startsWith("asking you")) {
+			return or("agentcraft.plate.question", "question for you");
+		}
+		if (act.equals("some failing")) {
+			return or("agentcraft.plate.failing_some", "some failing");
+		}
+		java.util.regex.Matcher failing = java.util.regex.Pattern.compile("^(\\d+) failing$").matcher(act);
+		if (failing.matches()) {
+			return or("agentcraft.plate.failing_n", failing.group(1) + " failing", failing.group(1));
+		}
+		return act.replace("`", "");
+	}
 }
