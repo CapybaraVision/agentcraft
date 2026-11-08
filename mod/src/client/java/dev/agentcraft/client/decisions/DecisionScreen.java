@@ -129,7 +129,7 @@ public class DecisionScreen extends Screen {
 	private @Nullable Decision preview;
 
 	public DecisionScreen(@Nullable String decisionId, @Nullable Screen parent) {
-		super(Component.literal("Decisions"));
+		super(Component.translatable("agentcraft.screen.decisions"));
 		this.currentId = decisionId;
 		this.parent = parent;
 	}

@@ -6,6 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { applyGameLanguage, normalizeLocale, translate } from './locale.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tools = path.join(root, 'tools');
@@ -19,24 +20,20 @@ const saveJson = (file, value) => {
 };
 const runFile = (kind, profile) => path.join(runDir, `unix-${kind}-${profile}.json`);
 
-function usage(code = 0) {
-  console.log(`AgentCraft launcher (macOS, Linux)
-  node tools/unix.mjs launch [--backend sim|claude|codex] [--repo PATH] [--use-claude-login]
-                            [--home PATH] [--profile NAME] [--port N] [--dev-port N]
-                            [--dev] [--showcase busy|late] [--reset]
-                            [--no-game] [--no-foreman] [--no-wait]
-                            [--summary-json PATH]
-                            [--foreman-arg VALUE] (repeatable)
-  node tools/unix.mjs stop [--game] [--foreman] [--profile NAME] [--stop-daemon]
+function usageLocale() {
+  const i = process.argv.indexOf('--locale');
+  try { return normalizeLocale(i >= 0 ? process.argv[i + 1] : process.env.AGENTCRAFT_LOCALE); }
+  catch { return 'ko'; }
+}
 
-Default: Claude backend, ~/.agentcraft, ports 7878/7879. --dev mutes the game,
-keeps it from taking focus, and disables desktop notifications.`);
+function usage(code = 0) {
+  console.log(translate(usageLocale(), 'unix_usage'));
   process.exit(code);
 }
 
 function options(argv) {
   const out = { action: argv.shift(), repo: [], foremanArgs: [] };
-  const values = new Set(['backend', 'repo', 'home', 'profile', 'port', 'dev-port', 'showcase', 'summary-json', 'foreman-arg']);
+  const values = new Set(['backend', 'repo', 'home', 'profile', 'port', 'dev-port', 'showcase', 'summary-json', 'foreman-arg', 'locale']);
   const switches = new Set(['use-claude-login', 'dev', 'reset', 'no-game', 'no-foreman', 'no-wait', 'game', 'foreman', 'stop-daemon']);
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].replace(/^--/, '');
@@ -67,6 +64,7 @@ function options(argv) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`invalid port: ${port}`);
   }
   if (out.port === out['dev-port']) throw new Error('Foreman and DevBridge ports must differ');
+  out.locale = normalizeLocale(out.locale ?? process.env.AGENTCRAFT_LOCALE);
   return out;
 }
 
@@ -191,14 +189,14 @@ async function launch(opt, summary) {
     if (owned(fm) && await portOpen(fm.port)) {
       fmPort = fm.port;
       summary.foreman.port = fmPort;
-      console.log(`Reusing Foreman ${fm.pid} on :${fmPort}`);
+      console.log(translate(opt.locale, 'unix_reusing', { pid: fm.pid, port: fmPort }));
       if (fm.backend !== opt.backend) console.warn(`Foreman is already using backend ${fm.backend}`);
       for (const repo of opt.repo) console.log(runCli('foremancli.mjs', ['repo-add', repo, '--port', String(fmPort)]));
     } else {
       if (await portOpen(fmPort)) throw new Error(`port ${fmPort} is already in use`);
       installDeps(path.join(root, 'foreman'));
       const args = ['--import', 'tsx', 'src/main.ts', '--backend', opt.backend,
-        '--profile', opt.profile, '--home', opt.home, '--port', String(fmPort)];
+        '--profile', opt.profile, '--home', opt.home, '--port', String(fmPort), '--locale', opt.locale];
       for (const repo of opt.repo) args.push('--repo', repo);
       if (opt['use-claude-login']) args.push('--use-claude-login');
       if (opt.dev) args.push('--no-notify');
@@ -209,7 +207,7 @@ async function launch(opt, summary) {
       saveJson(fmFile, fm);
       summary.foreman.started = true;
       await waitPort(fmPort, 120000, fm, 'Foreman');
-      console.log(`Foreman running on :${fmPort} (PID ${fm.pid})`);
+      console.log(translate(opt.locale, 'unix_running', { port: fmPort, pid: fm.pid }));
     }
   } else if (!await portOpen(fmPort)) {
     console.warn(`No Foreman is listening on :${fmPort}; the game will retry connecting.`);
@@ -233,6 +231,12 @@ async function launch(opt, summary) {
   }
   if (await portOpen(opt['dev-port'])) throw new Error(`DevBridge port ${opt['dev-port']} is already in use`);
   prepareAudio(opt.dev);
+  applyGameLanguage({
+    locale: opt.locale,
+    optionsPath: path.join(root, 'mod', 'run', 'options.txt'),
+    templatePath: path.join(root, 'mod', 'run-template', 'options.txt'),
+    markerPath: path.join(root, 'mod', 'run', 'agentcraft-locale.applied'),
+  });
   const gradleHome = process.env.GRADLE_USER_HOME || path.join(root, '.gradle-home');
   const env = {
     JAVA_HOME: javaHome(), GRADLE_USER_HOME: gradleHome,
@@ -243,13 +247,13 @@ async function launch(opt, summary) {
   game = { ...start('/bin/sh', [path.join(root, 'mod', 'gradlew'), 'runClient', '--console=plain'], path.join(root, 'mod'), path.join(logDir, 'unix-game.log'), env), devPort: opt['dev-port'], foremanPort: fmPort };
   saveJson(gameFile, game);
   summary.game.started = true;
-  console.log(`Starting Minecraft (Gradle PID ${game.pid}); log: ${game.log}`);
+  console.log(translate(opt.locale, 'unix_starting', { pid: game.pid, log: game.log }));
   if (opt['no-wait']) return;
   await waitPort(game.devPort, 600000, game, 'Minecraft');
-  console.log('Waiting for the studio world...');
+  console.log(translate(opt.locale, 'unix_waiting'));
   const state = JSON.parse(runCli('devcli.mjs', ['wait', '--port', String(game.devPort), '--timeout', '300'], 310000));
   console.log(`Studio ready: Minecraft ${state.minecraft}, world ${state.world?.name ?? 'unknown'}, Foreman ${state.foreman?.link ?? 'unknown'}`);
-  console.log(`Ready. Stop with: node tools/unix.mjs stop --profile ${opt.profile}`);
+  console.log(translate(opt.locale, 'unix_ready', { profile: opt.profile }));
 }
 
 async function stop(opt) {

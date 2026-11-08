@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { createTeam } from './agents/teams.js';
 import { SimBackend } from './agents/sim/index.js';
 import { DEFAULT_SIM_GOAL } from './agents/sim/scenario.js';
-import { FOREMAN_VERSION, HELP, loadConfig, type Config } from './config.js';
+import { FOREMAN_VERSION, helpText, loadConfig, type Config } from './config.js';
+import { t } from './locale.js';
 import { consoleLogger } from './context.js';
 import { Foreman } from './foreman.js';
 import { ForemanServer } from './server.js';
@@ -22,14 +23,14 @@ async function createDemoRepo(cfg: Config, dir: string): Promise<void> {
 function wipeProfile(cfg: Config): void {
   // only ever delete inside the configured home
   if (!isInsideOrEqual(cfg.dataDir, cfg.home) || path.resolve(cfg.dataDir) === path.resolve(cfg.home)) {
-    throw new Error(`refusing to wipe ${cfg.dataDir}`);
+    throw new Error(t('refuse_wipe', { dir: cfg.dataDir }));
   }
   fs.rmSync(cfg.dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }
 
 export async function main(argv: string[]): Promise<void> {
   if (argv.includes('--help') || argv.includes('-h')) {
-    console.log(HELP);
+    console.log(helpText(argv));
     return;
   }
   const cfg = loadConfig(argv);
@@ -38,13 +39,13 @@ export async function main(argv: string[]): Promise<void> {
   // one Foreman per profile (two would both write its state.json) - checked before --reset wipes it
   const owner = await liveOwner(profileRunFile(cfg.dataDir));
   if (owner) {
-    log.error(`profile "${cfg.profile}" is in use by the Foreman pid ${owner.pid} (ws://${owner.host}:${owner.port}). Stop it first, or use another --profile.`);
+    log.error(t('profile_in_use', { profile: cfg.profile, pid: owner.pid, host: owner.host, port: owner.port }));
     process.exitCode = 1;
     return;
   }
 
   if (cfg.reset) {
-    log.info(`reset: wiping ${cfg.dataDir}`);
+    log.info(t('reset_wiping', { dir: cfg.dataDir }));
     wipeProfile(cfg);
   }
   const fresh = !fs.existsSync(path.join(cfg.dataDir, 'state.json'));
@@ -54,7 +55,7 @@ export async function main(argv: string[]): Promise<void> {
   if (cfg.backend === 'sim' && cfg.repos.length === 0) {
     const demo = path.join(cfg.projectRoot, 'sandbox', cfg.profile === 'sim' ? 'sim-demo' : `sim-demo-${cfg.profile}`);
     if (fresh || !fs.existsSync(demo)) {
-      log.info(`sim: creating fresh demo repo at ${demo}`);
+      log.info(t('sim_demo', { dir: demo }));
       await createDemoRepo(cfg, demo);
     }
     cfg.repos.push(demo);
@@ -69,8 +70,8 @@ export async function main(argv: string[]): Promise<void> {
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     if (code === 'EADDRINUSE') {
-      log.error(`port ${cfg.port} is already in use - is another Foreman running? (see ${homeRunFile(cfg.home)} and <home>/<profile>/foreman.json) Use --port or AGENTCRAFT_PORT.`);
-    } else log.error(`could not listen on ${cfg.host}:${cfg.port}: ${(e as Error).message}`);
+      log.error(t('port_in_use', { port: cfg.port, runfile: homeRunFile(cfg.home) }));
+    } else log.error(t('listen_fail', { host: cfg.host, port: cfg.port, message: (e as Error).message }));
     await foreman.close();
     process.exitCode = 1;
     return;
@@ -78,13 +79,13 @@ export async function main(argv: string[]): Promise<void> {
 
   await claimRunFiles(cfg.home, cfg.dataDir, { pid: process.pid, port: server.port, host: cfg.host, backend: cfg.backend, profile: cfg.profile, version: FOREMAN_VERSION, startedAt: new Date().toISOString() });
 
-  log.info(`AgentCraft Foreman ${FOREMAN_VERSION} | backend ${cfg.backend} | ws://${cfg.host}:${server.port} | state ${cfg.dataDir}`);
+  log.info(t('banner', { version: FOREMAN_VERSION, backend: cfg.backend, host: cfg.host, port: server.port, dir: cfg.dataDir }));
 
   let shuttingDown = false;
   const shutdown = async (sig: string) => {
     if (shuttingDown) return;
     shuttingDown = true;
-    log.info(`${sig}: shutting down (state is saved; agents resume on next start)`);
+    log.info(t('shutdown', { sig }));
     const force = setTimeout(() => process.exit(0), 8000);
     force.unref();
     await server.stop();
@@ -103,14 +104,14 @@ export async function main(argv: string[]): Promise<void> {
       if (d.trim() === 'q') void shutdown('quit');
     });
   }
-  process.on('uncaughtException', (e) => log.error(`uncaught: ${e.stack ?? e}`));
-  process.on('unhandledRejection', (e) => log.error(`unhandled rejection: ${(e as Error)?.stack ?? e}`));
+  process.on('uncaughtException', (e) => log.error(t('uncaught', { detail: e.stack ?? String(e) })));
+  process.on('unhandledRejection', (e) => log.error(t('unhandled', { detail: (e as Error)?.stack ?? String(e) })));
 
   await foreman.start(backend);
   if (backend instanceof SimBackend && (cfg.autostart || cfg.goal)) {
     await backend.autostart(cfg.goal ?? DEFAULT_SIM_GOAL);
   } else if (cfg.goal) {
-    await foreman.submitGoal(cfg.goal).catch((e) => log.error(`goal: ${(e as Error).message}`));
+    await foreman.submitGoal(cfg.goal).catch((e) => log.error(t('goal_fail', { message: (e as Error).message })));
   }
 }
 

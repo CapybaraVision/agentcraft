@@ -74,7 +74,7 @@ public final class LibraryScreen extends Screen {
 	private int textH;
 
 	public LibraryScreen(@Nullable String scope, @Nullable String memoryId) {
-		super(Component.literal("Memory library"));
+		super(Component.translatable("agentcraft.screen.library"));
 		this.scope = scope == null ? MemoryIndex.ALL : scope;
 		this.selectedId = memoryId;
 	}

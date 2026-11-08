@@ -233,7 +233,9 @@ public class MergeStationRenderer extends StationRenderer<MergeStationBlockEntit
 		int cw = Math.max(10, font.width(count) + 5);
 		int cx = w - 5 - cw;
 		int labelMax = cx - (x + 13) - (s.index == 0 ? 13 : 3);
-		String head = s.index == 0 ? (font.width("Merge review") <= labelMax ? "Merge review" : "Review") : "Next";
+		String full = dev.agentcraft.client.ui.UiText.or("agentcraft.ui.merge_review", "Merge review");
+		String shortLabel = dev.agentcraft.client.ui.UiText.or("agentcraft.ui.review", "Review");
+		String head = s.index == 0 ? (font.width(full) <= labelMax ? full : shortLabel) : dev.agentcraft.client.ui.UiText.or("agentcraft.ui.next", "Next");
 		WorldUi.submitText(ps, c, head, x + 13, 5, ink, light);
 		if (s.index == 0) {
 			float phase = (float) ((System.currentTimeMillis() % 1200) / 1200.0 * Math.PI * 2);

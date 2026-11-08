@@ -8,6 +8,7 @@
 //  - disabled with config.notify=false / AGENTCRAFT_NOTIFY=0; tests inject a fake `spawnToast`
 import { spawn } from 'node:child_process';
 import type { Logger } from './context.js';
+import { t } from './locale.js';
 import { truncate } from './util/text.js';
 
 export interface NotifierOptions {
@@ -131,16 +132,16 @@ export class Notifier {
   async flush(): Promise<void> {
     if (!this.pending.length) return;
     const items = this.pending.splice(0);
-    const title = items.length === 1 ? 'AgentCraft needs you' : `AgentCraft: ${items.length} decisions waiting`;
+    const title = items.length === 1 ? t('toast_one') : t('toast_many', { n: items.length });
     const body = items.length === 1 ? items[0]! : items.slice(-3).map((t) => `• ${t}`).join('\n');
     this.lastShown = this.now();
     this.sent.push({ title, body, ts: this.lastShown });
     const show = this.opts.spawnToast ?? showDesktopNotification;
     try {
       const ok = await show(title, body, this.opts.silent ?? false);
-      if (!ok) this.opts.log?.warn('desktop notification failed');
+      if (!ok) this.opts.log?.warn(t('toast_failed'));
     } catch (e) {
-      this.opts.log?.warn(`toast notification failed: ${(e as Error).message}`);
+      this.opts.log?.warn(t('toast_error', { message: (e as Error).message }));
     }
   }
 

@@ -91,7 +91,7 @@ describe('DecisionQueue', () => {
     now += 60_000;
     await n.flush();
     expect(shown).toHaveLength(2);
-    expect(shown[1]).toContain('2 decisions waiting');
+    expect(shown[1]).toContain('결정 2건');
     n.dispose();
     const off = new Notifier({ enabled: false, spawnToast: async () => (shown.push('x'), true) });
     off.needUser('nope');

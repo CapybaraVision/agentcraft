@@ -52,17 +52,20 @@ if ($AgentHome) { $AgentHome = Resolve-FullPath $AgentHome }
 
 $failures = 0
 $stoppedAny = $false
+$Locale = 'ko'
+if ($env:AGENTCRAFT_LOCALE -match '^(en|en-us|english)$') { $Locale = 'en' }
+Initialize-AcLocale $Locale
 Write-Host ''
-Write-Host 'AgentCraft stop' -ForegroundColor Cyan
+Write-Host (T 'stop_title') -ForegroundColor Cyan
 
 # --- game ------------------------------------------------------------------------------------------
 if ($doGame) {
     $gf = Get-GameRunFile $L
     $g = Read-JsonFile $gf
     if (-not $g) {
-        Write-Kv 'game' 'nothing to stop (no run file from launch.ps1)' 'DarkGray'
+        Write-Kv 'game' (T 'stop_none') 'DarkGray'
         $stray = Find-GameJvm $L
-        if ($stray) { Write-Warn2 "a game of this checkout is running but was not started by launch.ps1: $(Get-ProcLabel $stray.ProcessId) (left alone; node tools\devcli.mjs quit)" }
+        if ($stray) { Write-Warn2 (T 'stop_stray' @{ who = (Get-ProcLabel $stray.ProcessId) }) }
     } else {
         $t = Get-Date
         # the tree root launch.ps1 started: the bgrun wrapper (-> cmd -> gradlew java)
@@ -79,7 +82,7 @@ if ($doGame) {
         }
         $gameAlive = $gamePid -and (Test-SameProc $gamePid $gameStart)
         if (-not $gradleAlive -and -not $gameAlive) {
-            Write-Kv 'game' 'already stopped' 'DarkGray'
+            Write-Kv 'game' (T 'stop_already') 'DarkGray'
         } else {
             $stoppedAny = $true
             $how = 'force'
@@ -158,7 +161,7 @@ if ($doForeman) {
         $matched++
         $label = "Foreman '$($f.profile)' (pid $($f.pid), :$($f.port))"
         if (-not (Test-SameProc ([int]$f.pid) $f.startTime)) {
-            Write-Kv 'foreman' "$label already stopped" 'DarkGray'
+            Write-Kv 'foreman' "$label $(T 'stop_already')" 'DarkGray'
             Remove-Item -Force $file.FullName -ErrorAction SilentlyContinue
             continue
         }
@@ -188,7 +191,7 @@ if ($doForeman) {
         Write-Kv 'foreman' ("{0} stopped ({1}) in {2:N1} s{3}" -f $label, $how, ((Get-Date) - $t).TotalSeconds, $note) 'Green'
         Remove-Item -Force $file.FullName -ErrorAction SilentlyContinue
     }
-    if (-not $matched) { Write-Kv 'foreman' 'nothing to stop (no run file from launch.ps1)' 'DarkGray' }
+    if (-not $matched) { Write-Kv 'foreman' (T 'stop_none') 'DarkGray' }
 }
 
 # --- Gradle daemon(s) of this checkout ------------------------------------------------------------

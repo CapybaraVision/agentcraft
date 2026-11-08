@@ -7,6 +7,7 @@ import { MessageBus } from './bus.js';
 import { loadCast, type CastMember } from './cast.js';
 import type { Config } from './config.js';
 import { FOREMAN_VERSION } from './config.js';
+import { t } from './locale.js';
 import { consoleLogger, type Ctx, type Logger } from './context.js';
 import { DecisionError, DecisionQueue, type CreateDecisionInput } from './decisions.js';
 import { Memory, MemoryError } from './memory.js';
@@ -625,17 +626,17 @@ export class Foreman {
     for (const p of this.config.repos) {
       try {
         const r = await this.repos.add(p);
-        this.log.info(`repo ${r.id}: ${r.path} (${r.branch})`);
+        this.log.info(t('repo_line', { id: r.id, path: r.path, branch: r.branch }));
       } catch (e) {
-        this.log.error(`could not add repo ${p}: ${(e as Error).message}`);
+        this.log.error(t('repo_add_fail', { path: p, message: (e as Error).message }));
       }
     }
     for (const r of this.repos.list()) {
       if (!fs.existsSync(r.path)) {
-        this.log.warn(`repo ${r.id} path is gone: ${r.path}`);
+        this.log.warn(t('repo_gone', { id: r.id, path: r.path }));
         continue;
       }
-      await this.repos.refresh(r.id).catch((e) => this.log.warn(`refresh ${r.id}: ${(e as Error).message}`));
+      await this.repos.refresh(r.id).catch((e) => this.log.warn(t('repo_refresh', { id: r.id, message: (e as Error).message })));
     }
     this.repos.startPolling(this.config.repoPollMs);
     await backend.start();

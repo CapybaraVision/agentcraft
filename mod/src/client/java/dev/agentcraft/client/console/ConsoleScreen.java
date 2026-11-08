@@ -21,6 +21,7 @@ import dev.agentcraft.client.ui.Kit;
 import dev.agentcraft.client.ui.Panels;
 import dev.agentcraft.client.ui.TextUtil;
 import dev.agentcraft.client.ui.UiStyle;
+import dev.agentcraft.client.ui.UiText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -114,7 +115,7 @@ public class ConsoleScreen extends Screen {
 	}
 
 	public ConsoleScreen(@Nullable String prefill) {
-		super(Component.literal("Console"));
+		super(Component.translatable("agentcraft.screen.console"));
 		if (prefill != null) {
 			input.set(prefill);
 		} else if (!ConsoleLog.draft().isEmpty()) {
@@ -558,20 +559,20 @@ public class ConsoleScreen extends Screen {
 			}
 		} else if (pendingGoal != null) {
 			Repo r = pendingGoal.choices().get(Math.max(0, Math.min(repoSel, pendingGoal.choices().size() - 1)));
-			hint = "new goal \u2192 " + r.name();
+			hint = UiText.or("agentcraft.intent.goal_repo", "new goal \u2192 " + r.name(), r.name());
 		} else if (intent != null) {
 			ForemanState s = Foreman.state();
 			if (s != null && s.hasData() && s.isStale() && sendsToForeman(intent)) {
 				// say it before Enter, not after
-				hint = "Foreman offline: this can't be sent yet";
+				hint = UiText.or("agentcraft.console.offline_unsent", "Foreman offline: this can't be sent yet");
 				hintColor = UiBits.errorText();
 			} else if (intent instanceof Invalid inv) {
-				hint = errorStripVisible() ? null : inv.error();
+				hint = errorStripVisible() ? null : ConsoleText.shown(inv);
 			} else if (s != null) {
-				hint = ConsoleCommands.describe(intent, s);
+				hint = ConsoleText.describe(intent, s);
 			}
 		}
-		String placeholder = "Type a goal, @agent to message, or /help";
+		String placeholder = UiText.or("agentcraft.console.placeholder", "Type a goal, @agent to message, or /help");
 		return new TextFieldView.Style(">", UiStyle.BRASS, placeholder, ghostText(), hint, hintColor, 6);
 	}
 
@@ -807,7 +808,7 @@ public class ConsoleScreen extends Screen {
 		int w = Math.max(panelW, Math.min(fieldW, 300));
 		Panels.panel(g, fieldX, y, w, h);
 		int x = fieldX + p.left();
-		g.text(font, "Which repo is this goal for?", x, y + p.top(), UiBits.ink(), false);
+		g.text(font, UiText.or("agentcraft.ui.which_repo", "Which repo is this goal for?"), x, y + p.top(), UiBits.ink(), false);
 		String hint = "Enter send · 1-" + pg.choices().size() + " pick · Esc back";
 		g.text(font, hint, fieldX + w - p.right() - font.width(hint), y + p.top(), UiBits.muted(), false);
 		int cx = x;

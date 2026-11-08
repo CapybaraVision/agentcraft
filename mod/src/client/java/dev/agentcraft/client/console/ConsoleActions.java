@@ -21,6 +21,8 @@ import dev.agentcraft.client.console.ConsoleLog.Tone;
 import dev.agentcraft.client.decisions.DecisionQueue;
 import dev.agentcraft.client.decisions.DecisionsFeature;
 import dev.agentcraft.client.decisions.DiffLink;
+import dev.agentcraft.client.hud.Keys;
+import dev.agentcraft.client.ui.UiText;
 import dev.agentcraft.client.foreman.Foreman;
 import dev.agentcraft.client.foreman.ForemanState;
 import dev.agentcraft.client.foreman.Protocol.Ack;
@@ -103,7 +105,7 @@ public final class ConsoleActions {
 				return After.KEEP;
 			}
 			case Invalid i -> {
-				setFeedback(i.error(), Tone.ERROR, false);
+				setFeedback(ConsoleText.shown(i), Tone.ERROR, false);
 				return After.KEEP;
 			}
 			case Help h -> {
@@ -279,33 +281,37 @@ public final class ConsoleActions {
 	// ------------------------------------------------------------------ local commands
 
 	private static void help(@Nullable String topic) {
-		ConsoleLog.add(Tone.HEADER, "Console");
-		ConsoleLog.add(Tone.HELP, "plain text\ta new goal for Marlow (several repos: you pick one)");
-		ConsoleLog.add(Tone.HELP, "@juniper text\tmessage an agent (Tab completes, @all = everyone)");
+		ConsoleLog.add(Tone.HEADER, UiText.or("agentcraft.console.help_header", "Console"));
+		ConsoleLog.add(Tone.HELP, UiText.or("agentcraft.console.help_plain", "plain text\ta new goal for Marlow (several repos: you pick one)"));
+		ConsoleLog.add(Tone.HELP, UiText.or("agentcraft.console.help_mention", "@juniper text\tmessage an agent (Tab completes, @all = everyone)"));
 		for (Command c : ConsoleCommands.COMMANDS) {
 			if (topic == null || c.name().startsWith(topic)) {
-				ConsoleLog.add(Tone.HELP, c.usage() + "\t" + c.help());
+				ConsoleLog.add(Tone.HELP, c.usage() + "\t" + ConsoleText.commandHelp(c));
 			}
 		}
-		ConsoleLog.add(Tone.INFO, "Enter send \u00b7 Shift+Enter new line \u00b7 \u2191\u2193 history \u00b7 Tab complete \u00b7 "
-			+ dev.agentcraft.client.hud.Keys.label(dev.agentcraft.client.hud.Keys.decisions) + " decisions \u00b7 Esc close (your draft is kept)");
+		ConsoleLog.add(Tone.INFO, UiText.or("agentcraft.console.help_keys",
+			"Enter send · Shift+Enter new line · ↑↓ history · Tab complete · " + Keys.label(Keys.decisions) + " decisions · Esc close (your draft is kept)",
+			Keys.label(Keys.decisions)));
 	}
 
 	private static void status(ForemanState s) {
-		ConsoleLog.add(Tone.HEADER, "Status");
+		ConsoleLog.add(Tone.HEADER, UiText.or("agentcraft.console.status_header", "Status"));
 		if (!s.hasData()) {
-			ConsoleLog.add(Tone.ERROR, "no data from the Foreman yet");
+			ConsoleLog.add(Tone.ERROR, UiText.or("agentcraft.console.no_data", "no data from the Foreman yet"));
 			return;
 		}
 		if (s.isStale()) {
-			ConsoleLog.add(Tone.ERROR, "Foreman offline: this is the last known state");
+			ConsoleLog.add(Tone.ERROR, UiText.or("agentcraft.console.offline", "Foreman offline: this is the last known state"));
 		}
 		var g = s.goal();
 		if (g != null) {
-			ConsoleLog.add(Tone.INFO, "goal " + g.id() + " (" + g.status().wire() + ", " + Math.round(g.progress() * 100) + "%): "
-				+ ConsoleCommands.oneLine(g.text(), 90));
+			String text = ConsoleCommands.oneLine(g.text(), 90);
+			int pct = (int) Math.round(g.progress() * 100);
+			ConsoleLog.add(Tone.INFO, UiText.or("agentcraft.console.goal_line",
+				"goal " + g.id() + " (" + g.status().wire() + ", " + pct + "%): " + text,
+				g.id(), g.status().wire(), pct, text));
 		} else {
-			ConsoleLog.add(Tone.INFO, "no goal yet: type one and press Enter");
+			ConsoleLog.add(Tone.INFO, UiText.or("agentcraft.console.no_goal", "no goal yet: type one and press Enter"));
 		}
 		Map<TaskStatus, Integer> counts = new LinkedHashMap<>();
 		for (TaskStatus ts : List.of(TaskStatus.DOING, TaskStatus.REVIEW, TaskStatus.TODO, TaskStatus.BLOCKED, TaskStatus.DONE)) {
@@ -314,21 +320,22 @@ public final class ConsoleActions {
 		for (Task t : s.tasks().values()) {
 			counts.computeIfPresent(t.status(), (k, v) -> v + 1);
 		}
-		StringBuilder tb = new StringBuilder("tasks: ");
+		StringBuilder tb = new StringBuilder(UiText.or("agentcraft.console.tasks_prefix", "tasks: "));
 		counts.forEach((k, v) -> tb.append(v).append(' ').append(k.wire()).append("  "));
 		ConsoleLog.add(Tone.INFO, tb.toString().strip());
 		String spend = spendLabel(s);
 		if (spend != null) {
-			ConsoleLog.add(Tone.INFO, "Claude API spend so far: " + spend + " (estimated, this profile)");
+			ConsoleLog.add(Tone.INFO, UiText.or("agentcraft.console.spend", "Claude API spend so far: " + spend + " (estimated, this profile)", spend));
 		}
 		for (Agent a : s.agents().values()) {
-			String st = !a.isActive() ? "off shift" : a.isPaused() ? "paused" : a.state().wire().replace('_', ' ');
+			String st = !a.isActive() ? UiText.or("agentcraft.agent.off_shift", "off shift")
+				: a.isPaused() ? UiText.or("agentcraft.agent.paused", "paused") : a.state().wire().replace('_', ' ');
 			ConsoleLog.add(Tone.INFO, a.name() + " \u00b7 " + st + (a.activity().isEmpty() ? "" : " \u00b7 " + a.activity()) + (a.taskId() != null ? " ("
 				+ a.taskId() + ")" : ""), a.id());
 		}
 		List<Decision> open = DecisionQueue.open();
 		if (open.isEmpty()) {
-			ConsoleLog.add(Tone.OK, "no decisions waiting");
+			ConsoleLog.add(Tone.OK, UiText.or("agentcraft.console.no_decisions", "no decisions waiting"));
 		} else {
 			for (Decision d : open) {
 				ConsoleLog.add(Tone.INFO, d.id() + " " + DecisionQueue.kindLabel(d.kind()) + ": " + ConsoleCommands.oneLine(d.question(), 80), d.agentId());
@@ -346,15 +353,15 @@ public final class ConsoleActions {
 	}
 
 	private static void repos(ForemanState s) {
-		ConsoleLog.add(Tone.HEADER, "Repos");
+		ConsoleLog.add(Tone.HEADER, UiText.or("agentcraft.console.repos_header", "Repos"));
 		if (s.repos().isEmpty()) {
 			String example = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win")
 				? "C:\\path\\to\\repo" : "/path/to/repo";
-			ConsoleLog.add(Tone.INFO, "none yet: /repo add " + example);
+			ConsoleLog.add(Tone.INFO, UiText.or("agentcraft.console.repos_none", "none yet: /repo add " + example, example));
 			return;
 		}
 		for (Repo r : s.repos().values()) {
-			ConsoleLog.add(Tone.INFO, r.name() + " \u00b7 " + r.branch() + (r.head() != null ? " @ " + r.head() : "") + (r.dirty() ? " \u00b7 uncommitted changes"
+			ConsoleLog.add(Tone.INFO, r.name() + " \u00b7 " + r.branch() + (r.head() != null ? " @ " + r.head() : "") + (r.dirty() ? UiText.or("agentcraft.console.dirty", " \u00b7 uncommitted changes")
 				: "") + " \u00b7 " + r.path());
 		}
 	}

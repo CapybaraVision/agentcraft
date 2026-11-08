@@ -20,8 +20,10 @@ import readline from 'node:readline';
 import WebSocket from 'ws';
 import type { Agent, Decision, DiffFile, FeedItem, Goal, MemoryEntry, Repo, ServerMessage, Task } from '../src/protocol.js';
 import { parseFlags } from '../src/config.js';
+import { resolveLocale, setLocale, t } from '../src/locale.js';
 
 const { flags } = parseFlags(process.argv.slice(2));
+setLocale(resolveLocale(flags.locale ?? process.env.AGENTCRAFT_LOCALE));
 const port = Number(flags.port ?? process.env.AGENTCRAFT_PORT ?? 7878);
 const url = `ws://127.0.0.1:${port}`;
 const useColor = flags.color !== false && !process.env.NO_COLOR;
@@ -74,7 +76,7 @@ const name = (id?: string) => (id ? (id === 'user' ? (S.status?.userName ?? 'you
 
 function agentLine(a: Agent): string {
   const st = a.state === 'waiting_user' ? paint('yellow', a.state) : a.state === 'error' || a.state === 'blocked' ? paint('red', a.state) : a.state === 'done' ? paint('green', a.state) : paint('cyan', a.state);
-  return `${paint('bold', a.name.padEnd(8))} ${st.padEnd(useColor ? 21 : 12)} @${a.station.padEnd(12)} ${a.activity}${a.taskId ? paint('dim', ` [${a.taskId}]`) : ''}${a.paused ? paint('yellow', ' (paused)') : ''}${a.active || a.activity === 'off shift' ? '' : paint('dim', ' (off shift)')}`;
+  return `${paint('bold', a.name.padEnd(8))} ${st.padEnd(useColor ? 21 : 12)} @${a.station.padEnd(12)} ${a.activity}${a.taskId ? paint('dim', ` [${a.taskId}]`) : ''}${a.paused ? paint('yellow', ' ' + t('tui_paused')) : ''}${a.active || a.activity === 'off shift' ? '' : paint('dim', ' ' + t('tui_off_shift'))}`;
 }
 
 function printBoard(): void {
@@ -428,7 +430,7 @@ async function command(line: string): Promise<void> {
       finish(0);
       return;
     default:
-      out(paint('red', `unknown command /${cmd}`));
+      out(paint('red', t('tui_unknown', { cmd: cmd ?? '' })));
   }
 }
 

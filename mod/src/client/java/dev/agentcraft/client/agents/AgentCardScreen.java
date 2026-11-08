@@ -120,7 +120,7 @@ public final class AgentCardScreen extends Screen {
 	}
 
 	public AgentCardScreen(String agentId) {
-		super(Component.literal("Agent"));
+		super(Component.translatable("agentcraft.screen.agent"));
 		this.agentId = agentId;
 		lastAgent = agentId;
 	}
@@ -573,14 +573,14 @@ public final class AgentCardScreen extends Screen {
 		Btn pause = buttons[1];
 		Btn stop = buttons[2];
 		boolean on = live();
-		msg.label = field != null ? "Send" : "Message";
+		msg.label = field != null ? dev.agentcraft.client.ui.UiText.or("agentcraft.ui.send", "Send") : dev.agentcraft.client.ui.UiText.or("agentcraft.ui.message", "Message");
 		// one call to action at a time: the decision block's when there is one
 		msg.primary = field != null || owned == null;
 		msg.disabled = !on;
-		pause.label = ag.isPaused() ? "Resume" : "Pause";
+		pause.label = ag.isPaused() ? dev.agentcraft.client.ui.UiText.or("agentcraft.ui.resume", "Resume") : dev.agentcraft.client.ui.UiText.or("agentcraft.ui.pause", "Pause");
 		pause.primary = false;
 		pause.disabled = !on || !ag.isActive();
-		stop.label = ag.isActive() ? "Stop" : "Spawn";
+		stop.label = ag.isActive() ? dev.agentcraft.client.ui.UiText.or("agentcraft.ui.stop", "Stop") : dev.agentcraft.client.ui.UiText.or("agentcraft.ui.spawn", "Spawn");
 		stop.primary = false;
 		stop.disabled = !on;
 		int gap = 6;
@@ -617,19 +617,19 @@ public final class AgentCardScreen extends Screen {
 
 	private static String stateLabel(Agent a, @Nullable AgentView v) {
 		if (v != null && v.stale) {
-			return "Offline";
+			return dev.agentcraft.client.ui.UiText.or("agentcraft.agent.offline", "Offline");
 		}
 		if (!a.isActive()) {
-			return "Off shift";
+			return dev.agentcraft.client.ui.UiText.or("agentcraft.agent.off_shift_title", "Off shift");
 		}
 		if (a.isPaused()) {
-			return "Paused";
+			return dev.agentcraft.client.ui.UiText.or("agentcraft.agent.paused_title", "Paused");
 		}
 		if (a.state() == AgentState.WAITING_USER || v != null && "waiting".equals(v.family)) {
-			return "Waiting for you";
+			return dev.agentcraft.client.ui.UiText.or("agentcraft.agent.waiting", "Waiting for you");
 		}
 		return switch (a.state()) {
-			case UNKNOWN -> "Idle";
+			case UNKNOWN -> dev.agentcraft.client.ui.UiText.or("agentcraft.agent.idle", "Idle");
 			default -> {
 				String s = a.state().wire();
 				yield Character.toUpperCase(s.charAt(0)) + s.substring(1);
@@ -639,12 +639,12 @@ public final class AgentCardScreen extends Screen {
 
 	private static String column(Task t) {
 		return switch (t.status()) {
-			case TODO -> "To do";
-			case DOING -> "Doing";
-			case REVIEW -> "In review";
-			case DONE -> "Done";
-			case BLOCKED -> "Blocked";
-			case CANCELLED -> "Cancelled";
+			case TODO -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.todo", "To do");
+			case DOING -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.doing", "Doing");
+			case REVIEW -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.review", "In review");
+			case DONE -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.done", "Done");
+			case BLOCKED -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.blocked", "Blocked");
+			case CANCELLED -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.cancelled", "Cancelled");
 			default -> "";
 		};
 	}

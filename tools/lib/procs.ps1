@@ -316,6 +316,30 @@ function Write-Kv([string]$Key, [string]$Value, [string]$Color = 'Gray') {
 function Write-Warn2([string]$Text) { Write-Host "  ! $Text" -ForegroundColor Yellow }
 function Write-Fail([string]$Text) { Write-Host "  x $Text" -ForegroundColor Red }
 
+# Korean is the default launcher language. Strings live in tools/locale/messages.json
+# (UTF-8). -Locale en / AGENTCRAFT_LOCALE=en selects English. Parameter names stay English.
+function Initialize-AcLocale([string]$Locale) {
+    if ($Locale -notmatch '^(ko|en)$') { throw "unknown locale '$Locale' (use ko or en)" }
+    $path = Join-Path (Split-Path $PSScriptRoot -Parent) 'locale\messages.json'
+    $raw = [System.IO.File]::ReadAllText($path, (New-Object System.Text.UTF8Encoding $false))
+    $all = $raw | ConvertFrom-Json
+    $script:AcLocale = $Locale
+    $script:AcMsg = $all.$Locale
+    $script:AcMsgEn = $all.en
+}
+
+function T([string]$Key, [hashtable]$Vars) {
+    $s = $null
+    if ($script:AcMsg) { $s = $script:AcMsg.$Key }
+    if (-not $s -and $script:AcMsgEn) { $s = $script:AcMsgEn.$Key }
+    if (-not $s) { return $Key }
+    $text = [string]$s
+    if ($Vars) {
+        foreach ($name in @($Vars.Keys)) { $text = $text.Replace('{' + $name + '}', [string]$Vars[$name]) }
+    }
+    return $text
+}
+
 function Get-LogTail([string]$Path, [int]$Lines = 25) {
     if (-not (Test-Path $Path)) { return @() }
     try { return @(Get-Content -Tail $Lines -Path $Path -ErrorAction Stop) } catch { return @() }

@@ -6,6 +6,24 @@ import { readJson } from './util/fsx.js';
 import type { BackendName } from './protocol.js';
 import { defaultUserName } from './user.js';
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
+import {
+  badEnginesEntryMessage,
+  badLeadReadMessage,
+  badProfileMessage,
+  deniedLeadReadMessage,
+  getLocale,
+  missingEngineMessage,
+  resolveLocale,
+  setLocale,
+  t,
+  unexpectedArgumentMessage,
+  unknownBackendMessage,
+  unknownEffortMessage,
+  unknownEngineMessage,
+  unknownMergeStyleMessage,
+  unknownOptionMessage,
+  type LocaleId,
+} from './locale.js';
 
 export const FOREMAN_VERSION = '0.1.0';
 
@@ -107,6 +125,8 @@ export interface Config {
   codex: CodexConfig;
   engines: EngineChoice;
   sim: SimConfig;
+  /** operator language for help, status and Foreman errors. Default ko. Not a protocol field. */
+  locale: LocaleId;
 }
 
 type Flags = Record<string, string | boolean>;
@@ -178,10 +198,10 @@ function readCommands(v: unknown): string[] {
   for (const e of entries) {
     const [head = '', ...words] = e.split(/\s+/);
     if (!/^[A-Za-z0-9_.+-]+$/.test(head) || !words.every((w) => /^[A-Za-z0-9_.:@+=-]+$/.test(w))) {
-      throw new Error(`bad lead read command "${e}" (use a bare program name and plain words, like "bd show")`);
+      throw new Error(badLeadReadMessage(e));
     }
     if (NOT_READ_ONLY.has(head.toLowerCase().replace(/\.(exe|cmd|bat)$/, ''))) {
-      throw new Error(`lead read command "${e}" is not allowed: "${head}" can write files, run code or use the network`);
+      throw new Error(deniedLeadReadMessage(e, head));
     }
   }
   return entries;
@@ -190,14 +210,14 @@ function readCommands(v: unknown): string[] {
 function mergeStyle(v: unknown): 'merge' | 'squash' {
   if (v === undefined || v === 'merge') return 'merge';
   if (v === 'squash') return 'squash';
-  throw new Error(`unknown merge style "${String(v)}" (use merge or squash)`);
+  throw new Error(unknownMergeStyleMessage(String(v)));
 }
 
 const EFFORTS: EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 function effort(v: unknown, d: EffortLevel): EffortLevel {
   if (v === undefined) return d;
   if (typeof v === 'string' && (EFFORTS as string[]).includes(v)) return v as EffortLevel;
-  throw new Error(`unknown effort "${String(v)}" (use ${EFFORTS.join(', ')})`);
+  throw new Error(unknownEffortMessage(String(v), EFFORTS.join(', ')));
 }
 
 /** Every flag loadConfig reads (the `no-` prefix is stripped by parseFlags). */
@@ -207,13 +227,13 @@ export const KNOWN_FLAGS = new Set([
   'lead-model', 'worker-model', 'effort', 'lead-effort', 'max-turns', 'max-turns-lead', 'max-turns-worker',
   'max-concurrent', 'ci', 'max-budget', 'resume', 'lead-review', 'speed', 'seed', 'showcase', 'auto-answer',
   'ambient', 'lead-read-commands', 'lead-engine', 'worker-engine', 'engines', 'codex-path', 'codex-model', 'codex-lead-model',
-  'codex-worker-model', 'codex-effort', 'codex-lead-effort',
+  'codex-worker-model', 'codex-effort', 'codex-lead-effort', 'locale',
 ]);
 
 function engineName(v: unknown, d: EngineName, what: string): EngineName {
   if (v === undefined || v === '') return d;
   if (typeof v === 'string' && (ENGINE_NAMES as string[]).includes(v)) return v as EngineName;
-  throw new Error(`unknown ${what} "${String(v)}" (use ${ENGINE_NAMES.join(' or ')})`);
+  throw new Error(unknownEngineMessage(what, String(v), ENGINE_NAMES.join(' or ')));
 }
 
 /** "kit=codex,wren=claude" (flag/env) or {"kit": "codex"} (config.json) */
@@ -222,8 +242,8 @@ function engineMap(v: unknown): Record<string, EngineName> {
     v && typeof v === 'object' && !Array.isArray(v) ? Object.entries(v as Record<string, unknown>) : list(v).map((e) => e.split('=').map((x) => x.trim()) as [string, string]);
   const out: Record<string, EngineName> = {};
   for (const [agent, engine] of pairs) {
-    if (!agent || !/^[a-z0-9_-]+$/i.test(agent)) throw new Error(`bad --engines entry "${agent}=${String(engine)}" (use agent=engine, e.g. kit=codex)`);
-    if (engine === undefined || engine === '') throw new Error(`no engine for ${agent} in --engines (use agent=engine, e.g. ${agent}=codex)`);
+    if (!agent || !/^[a-z0-9_-]+$/i.test(agent)) throw new Error(badEnginesEntryMessage(agent, String(engine)));
+    if (engine === undefined || engine === '') throw new Error(missingEngineMessage(agent));
     out[agent.toLowerCase()] = engineName(engine, 'claude', `engine for ${agent}`);
   }
   return out;
@@ -236,27 +256,26 @@ function engineMap(v: unknown): Record<string, EngineName> {
  */
 function checkArgs(flags: Flags, positional: string[]): void {
   const unknown = Object.keys(flags).filter((k) => !KNOWN_FLAGS.has(k));
-  if (unknown.length) {
-    throw new Error(`unknown option${unknown.length > 1 ? 's' : ''} ${unknown.map((k) => `"--${k}"`).join(', ')} (see --help)`);
-  }
-  if (positional.length) throw new Error(`unexpected argument "${positional[0]}" (options start with --; see --help)`);
+  if (unknown.length) throw new Error(unknownOptionMessage(unknown));
+  if (positional.length) throw new Error(unexpectedArgumentMessage(positional[0]!));
 }
 
 export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env): Config {
   const { flags, positional } = parseFlags(argv);
-  checkArgs(flags, positional);
   const home = path.resolve(str(flags.home) ?? env.AGENTCRAFT_HOME ?? path.join(os.homedir(), '.agentcraft'));
   const file = readJson<Record<string, unknown>>(path.join(home, 'config.json')) ?? {};
+  setLocale(resolveLocale(flags.locale ?? env.AGENTCRAFT_LOCALE ?? file.locale));
+  checkArgs(flags, positional);
   const fileClaude = (file.claude ?? {}) as Record<string, unknown>;
   const fileSim = (file.sim ?? {}) as Record<string, unknown>;
   const fileCodex = (file.codex ?? {}) as Record<string, unknown>;
   const pick = (k: string, envKey?: string): unknown => flags[k] ?? (envKey ? env[envKey] : undefined) ?? file[k];
 
   const backendRaw = String(pick('backend', 'AGENTCRAFT_BACKEND') ?? 'claude');
-  if (backendRaw !== 'sim' && backendRaw !== 'claude' && backendRaw !== 'codex') throw new Error(`unknown backend "${backendRaw}" (use sim, claude or codex)`);
+  if (backendRaw !== 'sim' && backendRaw !== 'claude' && backendRaw !== 'codex') throw new Error(unknownBackendMessage(backendRaw));
   const backend = backendRaw as BackendName;
   const profile = str(pick('profile', 'AGENTCRAFT_PROFILE')) ?? backend;
-  if (!/^[a-zA-Z0-9_-]+$/.test(profile)) throw new Error(`bad profile name "${profile}"`);
+  if (!/^[a-zA-Z0-9_-]+$/.test(profile)) throw new Error(badProfileMessage(profile));
 
   const repoFlag = flags.repo;
   const repos: string[] = [];
@@ -331,69 +350,15 @@ export function loadConfig(argv: string[], env: NodeJS.ProcessEnv = process.env)
       autoAnswer: bool(flags['auto-answer'] ?? fileSim.autoAnswer, false),
       ambient: bool(flags.ambient ?? fileSim.ambient, true),
     },
+    locale: getLocale(),
   };
   if (cfg.sim.showcase) cfg.autostart = true;
   return cfg;
 }
 
-export const HELP = `AgentCraft Foreman ${FOREMAN_VERSION}
-
-usage: npm run start -- [options]
-
-  --backend sim|claude|codex  agent backend (default: claude; codex = an all-Codex team)
-  --repo <path>[,<path>]   register local git repo(s) at start (sim: defaults to a fresh sandbox/sim-demo)
-  --goal "<text>"          submit a goal right away
-  --port <n>               WebSocket port (default 7878, env AGENTCRAFT_PORT)
-  --home <dir>             state root (default ~/.agentcraft, env AGENTCRAFT_HOME)
-  --user-name <name>       your name, as the agents address you (default: your OS user name,
-                           env AGENTCRAFT_USER_NAME, config.json "userName")
-  --profile <name>         state profile under home (default: backend name)
-  --reset                  wipe this profile's state first (sim: also recreates the demo repo)
-  --notify / --no-notify   desktop notification when a decision waits (default: on for claude, off for sim)
-  --toast-silent           toasts without sound
-  --repo-poll-ms <n>       how often repo checkouts are checked for head/dirty changes (default 10000)
-  --merge-style merge|squash  approved merges: merge commit keeping the agents' commits (default),
-                           or one squashed commit authored by you
-  --no-sign-merges         never sign approved merge commits (default: signed when your git
-                           config has commit.gpgsign=true; claude backend only)
-  --debug                  verbose logging
-
- sim backend
-  --speed <x>              speed multiplier (default 1)
-  --seed <n>               scenario seed (default 7)
-  --autostart              start the scripted scenario immediately (otherwise: on first goal.submit)
-  --showcase               run to the showcase checkpoint instantly and hold that static state
-  --showcase late          hold the later state instead (blocked, error, done and running agents)
-  --auto-answer            answer the scenario's own decisions (unattended runs)
-  --no-ambient             no idle chatter while waiting on you
-
- claude backend
-  auth: ANTHROPIC_API_KEY, or a cloud provider (CLAUDE_CODE_USE_BEDROCK / _VERTEX / _FOUNDRY)
-  --use-claude-login       use your local \`claude\` CLI login instead (personal use only; env
-                           AGENTCRAFT_USE_CLAUDE_LOGIN=1, config.json claude.useClaudeLogin)
-  --model <m>              model for lead and workers (default lead: opus, workers: sonnet)
-  --lead-model <m> / --worker-model <m>
-  --effort low|medium|high|xhigh|max   (default medium)
-  --max-turns <n>          turn cap per session run (default lead 40 / worker 80)
-  --workers <n|ids>        team size or comma list (default juniper,kit,wren)
-  --max-concurrent <n>     workers running at once (default 3)
-  --max-budget <usd>       per-turn USD cap
-  --ci "<cmd>"             test command run after each task (default: detected, e.g. npm test)
-  --lead-read-commands "<cmd>,..."
-                           read commands the lead runs without asking, by prefix, e.g.
-                           "bd show,gh issue view" (env AGENTCRAFT_LEAD_READ_COMMANDS)
-  --no-lead-review         skip the lead's review turn before merge decisions
-  --no-resume              do not resume interrupted sessions on start
-
- codex engine (--backend codex, or mixed teams)
-  auth: your Codex login (\`codex login\`: ChatGPT or an OpenAI API key)
-  --lead-engine claude|codex / --worker-engine claude|codex
-                           mix engines (default: the backend's), e.g. a Claude lead with Codex workers
-  --engines <agent=engine,...>  per agent, e.g. kit=codex,wren=claude (env AGENTCRAFT_ENGINES)
-  --codex-path <path>      the codex CLI (default: on PATH, else the Codex desktop app's)
-  --codex-model <m>        model for Codex agents (default: your Codex config's model)
-  --codex-lead-model <m> / --codex-worker-model <m>
-  --codex-effort <e>       reasoning effort (low|medium|high|xhigh...; default: your Codex config's)
-  Codex agents get none of your own MCP servers, plugins, web search or apps; every command and
-  out-of-worktree edit goes through the same policy and in-game permission prompts.
-`;
+/** --help. Honors --locale / AGENTCRAFT_LOCALE. config.json is not read for help. */
+export function helpText(argv: string[], env: NodeJS.ProcessEnv = process.env): string {
+  const { flags } = parseFlags(argv);
+  setLocale(resolveLocale(flags.locale ?? env.AGENTCRAFT_LOCALE));
+  return t('help', { version: FOREMAN_VERSION });
+}
