@@ -45,7 +45,7 @@ public final class PermissionBody {
 		if (cmd.size() > MAX_CMD_LINES) {
 			cmd = new ArrayList<>(cmd.subList(0, MAX_CMD_LINES));
 		}
-		String why = info.reason() != null ? info.reason() : "the Foreman asks before running this";
+		String why = info.reason() != null ? info.reason() : dev.agentcraft.client.ui.UiText.or("agentcraft.ui.perm_asks", "the Foreman asks before running this");
 		List<FormattedCharSequence> reason = TextUtil.wrap(font, why, w - 34);
 		if (reason.size() > 3) {
 			reason = new ArrayList<>(reason.subList(0, 3));

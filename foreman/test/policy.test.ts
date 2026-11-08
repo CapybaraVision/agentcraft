@@ -425,10 +425,17 @@ describe('permission policy', () => {
     expect(classifyToolUse('Bash', { command: 'rm -rf build && rm ~/notes.txt' }, { ...worker, alwaysAllow: keys }).action).toBe('allow');
   });
 
+  it('keeps a Windows drive path outside a POSIX worktree', () => {
+    expect(classifyToolUse('PowerShell', { command: 'Set-Content -Path C:/Windows/x.txt -Value hi' }, worker).action).toBe('ask');
+    expect(classifyToolUse('PowerShell', { command: 'Set-Content -Path C:\\Windows\\x.txt -Value hi' }, worker).action).toBe('ask');
+    expect(classifyToolUse('PowerShell', { command: 'Set-Content -Path src/x.ts -Value hi' }, worker).action).toBe('allow');
+    expect(classifyToolUse('Bash', { command: 'cd /d C:\\Windows && dir' }, worker).action).toBe(process.platform === 'win32' ? 'ask' : 'allow');
+  });
+
   it('describes what an approval covers', () => {
-    expect(describeRuleKey('Bash:exact:0123456789abcdef')).toBe('only this exact command');
-    expect(describeRuleKey('Bash:rm -r')).toMatch(/inside this agent's worktree/);
-    expect(describeRuleKey('Bash:outside:rm:wtree:c:\\x')).toMatch(/everything under c:\\x/);
+    expect(describeRuleKey('Bash:exact:0123456789abcdef')).toBe('이 명령 그대로만');
+    expect(describeRuleKey('Bash:rm -r')).toMatch(/작업 트리 안/);
+    expect(describeRuleKey('Bash:outside:rm:wtree:c:\\x')).toMatch(/c:\\x 아래 전체/);
   });
 
   it('asks before editing through a link that leads outside the worktree', () => {
@@ -472,10 +479,10 @@ describe('permission policy', () => {
   });
 
   it('describes the new scoped keys', () => {
-    expect(describeRuleKey('Bash:git checkout:main')).toBe('git checkout to exactly main');
-    expect(describeRuleKey('Write:.git:c:\\wt\\.git')).toMatch(/git internals/);
-    expect(describeRuleKey('Bash:npx tsc')).toMatch(/downloads it from the npm registry/);
-    expect(describeRuleKey('Bash:vite serve')).toMatch(/dev server/);
+    expect(describeRuleKey('Bash:git checkout:main')).toBe('git checkout 대상을 정확히 main');
+    expect(describeRuleKey('Write:.git:c:\\wt\\.git')).toMatch(/git 내부/);
+    expect(describeRuleKey('Bash:npx tsc')).toMatch(/npm 레지스트리/);
+    expect(describeRuleKey('Bash:vite serve')).toMatch(/개발 서버/);
   });
 
   it('splits command chains quote-aware', () => {

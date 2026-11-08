@@ -63,7 +63,7 @@ public class TaskScreen extends Screen {
 	}
 
 	public TaskScreen(String taskId) {
-		super(Component.literal("Task"));
+		super(Component.translatable("agentcraft.screen.task"));
 		this.taskId = taskId;
 	}
 
@@ -291,7 +291,7 @@ public class TaskScreen extends Screen {
 		// ---- CI + branch
 		String ci = switch (t.ci()) {
 			case PASS -> "passing";
-			case FAIL -> "failing";
+			case FAIL -> dev.agentcraft.client.ui.UiText.or("agentcraft.plate.failing", "failing");
 			case RUNNING -> "running";
 			default -> "not run";
 		};
@@ -554,12 +554,12 @@ public class TaskScreen extends Screen {
 
 	static String statusLabel(Task t) {
 		return switch (t.status()) {
-			case TODO -> "To do";
-			case DOING -> "Doing";
-			case REVIEW -> "In review";
-			case DONE -> "Done";
-			case BLOCKED -> "Blocked";
-			case CANCELLED -> "Cancelled";
+			case TODO -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.todo", "To do");
+			case DOING -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.doing", "Doing");
+			case REVIEW -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.review", "In review");
+			case DONE -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.done", "Done");
+			case BLOCKED -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.blocked", "Blocked");
+			case CANCELLED -> dev.agentcraft.client.ui.UiText.or("agentcraft.task.cancelled", "Cancelled");
 			default -> t.status().wire();
 		};
 	}

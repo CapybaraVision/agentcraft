@@ -132,7 +132,7 @@ public final class DiffScreen extends Screen {
 	private int barY;
 
 	public DiffScreen(Target target) {
-		super(Component.literal("Diff review"));
+		super(Component.translatable("agentcraft.screen.diff"));
 		this.target = target;
 	}
 
@@ -1210,8 +1210,8 @@ public final class DiffScreen extends Screen {
 			}
 			case CONFIRM_REJECT -> {
 				String q = "Reject abandons " + (target.worktree() == null ? "the branch" : target.worktree()) + ".";
-				String yes = "Reject branch";
-				String no = "Keep it";
+				String yes = dev.agentcraft.client.ui.UiText.or("agentcraft.ui.reject_branch", "Reject branch");
+				String no = dev.agentcraft.client.ui.UiText.or("agentcraft.ui.keep", "Keep it");
 				int yw = ReviewKit.buttonWidth(font, yes);
 				int nw = ReviewKit.buttonWidth(font, no);
 				button(g, "reject_confirm", yes, x, y, yw, ButtonKind.DANGER, !offline, mx, my, "x / Enter");
@@ -1233,9 +1233,9 @@ public final class DiffScreen extends Screen {
 			}
 			default -> {
 				if (open) {
-					String merge = "Merge";
-					String req = "Request changes";
-					String rej = "Reject";
+					String merge = dev.agentcraft.client.ui.UiText.or("agentcraft.ui.merge", "Merge");
+					String req = dev.agentcraft.client.ui.UiText.or("agentcraft.ui.request_changes", "Request changes");
+					String rej = dev.agentcraft.client.ui.UiText.or("agentcraft.ui.reject", "Reject");
 					int w1 = Math.max(64, ReviewKit.buttonWidth(font, merge));
 					int w2 = ReviewKit.buttonWidth(font, req);
 					int w3 = ReviewKit.buttonWidth(font, rej);
@@ -1379,7 +1379,7 @@ public final class DiffScreen extends Screen {
 		if (feedback != null) {
 			removeWidget(feedback);
 		}
-		feedback = new EditBox(font, ix + 6, barY + 6, 200, 10, Component.literal("Feedback"));
+		feedback = new EditBox(font, ix + 6, barY + 6, 200, 10, Component.translatable("agentcraft.ui.feedback"));
 		feedback.setBordered(false);
 		feedback.setTextShadow(false);
 		feedback.setTextColor(ReviewKit.ink());

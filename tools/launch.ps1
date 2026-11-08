@@ -51,7 +51,9 @@ param(
     [int]$TimeoutSec = 600,
     [string]$SummaryJson,
     # print what would be started (commands + game env) without starting anything
-    [switch]$DryRun
+    [switch]$DryRun,
+    # ko (default) or en. Also read from AGENTCRAFT_LOCALE. Parameter names stay English.
+    [string]$Locale
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,7 +63,14 @@ $Root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $L = Get-AcLayout $Root
 $Main = Get-MainCheckout $Root
 $t0 = Get-Date
-$summary = [ordered]@{ ok = $false; checkout = $Root; dev = [bool]$Dev; foreman = $null; game = $null; error = $null }
+if (-not $Locale) {
+    if ($env:AGENTCRAFT_LOCALE -match '^(en|en-us|english)$') { $Locale = 'en' } else { $Locale = 'ko' }
+}
+if ($Locale -match '^(en|en-us|english)$') { $Locale = 'en' }
+elseif ($Locale -match '^(ko|ko-kr|ko_kr|korean)$') { $Locale = 'ko' }
+else { Write-Fail "unknown locale '$Locale' (use ko or en)"; exit 1 }
+Initialize-AcLocale $Locale
+$summary = [ordered]@{ ok = $false; checkout = $Root; dev = [bool]$Dev; foreman = $null; game = $null; error = $null; locale = $Locale }
 
 function Save-Summary {
     if ($SummaryJson) { Write-JsonFile $SummaryJson $summary }
@@ -82,7 +91,7 @@ function Fail([string]$Message, [string[]]$Tail) {
 
 $showcaseOn = $Showcase.IsPresent -or [bool]$ShowcaseAt
 if ($showcaseOn) {
-    if ($Backend -and $Backend -ne 'sim') { Fail '-Showcase needs the sim backend (it holds a scripted state).' }
+    if ($Backend -and $Backend -ne 'sim') { Fail (T 'fail_showcase') }
     $Backend = 'sim'
     if (-not $ShowcaseAt) { $ShowcaseAt = 'busy' }
 }
@@ -91,12 +100,12 @@ if (-not $ForemanProfile) {
     if ($showcaseOn) { if ($ShowcaseAt -eq 'late') { $ForemanProfile = 'showcase-late' } else { $ForemanProfile = 'showcase' } }
     else { $ForemanProfile = $Backend }
 }
-if ($ForemanProfile -notmatch '^[A-Za-z0-9_-]+$') { Fail "bad profile name '$ForemanProfile' (letters, digits, - and _)" }
+if ($ForemanProfile -notmatch '^[A-Za-z0-9_-]+$') { Fail (T 'fail_profile' @{ profile = $ForemanProfile }) }
 $portGiven = [bool]$Port
 if (-not $Port) { if ($env:AGENTCRAFT_PORT) { $Port = [int]$env:AGENTCRAFT_PORT } else { $Port = 7878 } }
 if (-not $DevPort) { if ($env:AGENTCRAFT_DEV_PORT) { $DevPort = [int]$env:AGENTCRAFT_DEV_PORT } else { $DevPort = 7879 } }
-if ($Port -eq $DevPort) { Fail "-Port and -DevPort must differ (both $Port)" }
-foreach ($p in @($Port, $DevPort)) { if (@(3000, 5173, 8080) -contains $p) { Fail "port $p is reserved for other dev servers; pick another" } }
+if ($Port -eq $DevPort) { Fail (T 'fail_ports' @{ port = $Port }) }
+foreach ($p in @($Port, $DevPort)) { if (@(3000, 5173, 8080) -contains $p) { Fail (T 'fail_reserved' @{ port = $p }) } }
 if (-not $AgentHome) {
     if ($env:AGENTCRAFT_HOME) { $AgentHome = $env:AGENTCRAFT_HOME }
     elseif ($Dev) { $AgentHome = Join-Path $Main '.agentcraft-home' }   # unattended runs never touch ~/.agentcraft
@@ -113,24 +122,24 @@ foreach ($r in @($Repo | Where-Object { $_ })) {
     foreach ($part in ($r -split ',')) {
         if (-not $part.Trim()) { continue }
         $full = Resolve-FullPath $part.Trim()
-        if (-not (Test-Path (Join-Path $full '.git'))) { Fail "-Repo $full is not a git repository root" }
+        if (-not (Test-Path (Join-Path $full '.git'))) { Fail (T 'fail_repo' @{ path = $full }) }
         $repoPaths += $full
     }
 }
 New-Item -ItemType Directory -Force $L.Logs, $L.Run | Out-Null
 
 Write-Host ''
-Write-Host 'AgentCraft' -ForegroundColor Cyan -NoNewline
-if ($Dev) { Write-Host '  (dev: muted, no focus, no toasts)' -ForegroundColor DarkGray } else { Write-Host '' }
-Write-Kv 'checkout' $Root
-Write-Kv 'home' "$AgentHome  (profile $ForemanProfile)"
+Write-Host (T 'title') -ForegroundColor Cyan -NoNewline
+if ($Dev) { Write-Host (T 'dev_note') -ForegroundColor DarkGray } else { Write-Host '' }
+Write-Kv (T 'kv_checkout') $Root
+Write-Kv (T 'kv_home') (T 'home_value' @{ home = $AgentHome; profile = $ForemanProfile })
 
 # --- prerequisites -------------------------------------------------------------------------------
 
 $node = Get-Command node -ErrorAction SilentlyContinue
-if (-not $node) { Fail 'Node.js 22+ is required (https://nodejs.org). `node` is not on PATH.' }
+if (-not $node) { Fail (T 'fail_node_missing') }
 $nodeVer = (& $node.Source --version).Trim()
-if ([int]($nodeVer.TrimStart('v').Split('.')[0]) -lt 22) { Fail "Node.js 22+ is required (found $nodeVer)" }
+if ([int]($nodeVer.TrimStart('v').Split('.')[0]) -lt 22) { Fail (T 'fail_node_old' @{ version = $nodeVer }) }
 
 # npm dependencies: installed when node_modules is missing (first run) or older than the lockfile
 # (after a pull that changed dependencies). Never while something of ours may be using them.
@@ -147,7 +156,7 @@ function Install-NodeDeps([string]$Dir, [string]$Name) {
     if ($DryRun) { Write-Kv 'would run' "npm $verb in $Name/ ($why)" 'Yellow'; return }
     Write-Kv 'setup' "npm $verb in $Name/ ($why; log $log) ..." 'Yellow'
     $p = Start-Process -FilePath $env:ComSpec -ArgumentList "/d /s /c `"npm $verb --no-audit --no-fund`"" -WorkingDirectory $Dir -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError "$log.err" -Wait -PassThru
-    if ($p.ExitCode -ne 0) { Fail "npm $verb failed in $Name/ (exit $($p.ExitCode))" ((Get-LogTail $log 10) + (Get-LogTail "$log.err" 15)) }
+    if ($p.ExitCode -ne 0) { Fail (T 'fail_npm' @{ verb = $verb; name = $Name; code = $p.ExitCode }) ((Get-LogTail $log 10) + (Get-LogTail "$log.err" 15)) }
 }
 Install-NodeDeps $L.Tools 'tools'
 
@@ -156,8 +165,8 @@ if (-not $NoGame) {
     if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin\java.exe'))) { $javaExe = Join-Path $env:JAVA_HOME 'bin\java.exe' }
     $jv = ''
     try { $jv = (& $env:ComSpec /d /c "`"$javaExe`" -version 2>&1" | Select-Object -First 1) } catch {}
-    if ($jv -notmatch 'version "(\d+)') { Fail "Java 25 is required (https://adoptium.net, Temurin 25). Could not run '$javaExe -version'." }
-    if ([int]$Matches[1] -lt 25) { Fail "Java 25 is required for Minecraft 26.3 (found: $jv). Set JAVA_HOME to a JDK 25." }
+    if ($jv -notmatch 'version "(\d+)') { Fail (T 'fail_java_missing' @{ java = $javaExe }) }
+    if ([int]$Matches[1] -lt 25) { Fail (T 'fail_java_old' @{ found = $jv }) }
 }
 
 # --- Foreman -------------------------------------------------------------------------------------
@@ -165,28 +174,28 @@ if (-not $NoGame) {
 $fmInfo = $null
 $fmRunFile = Get-ForemanRunFile $L $AgentHome $ForemanProfile
 $live = Get-LiveForeman $AgentHome $ForemanProfile
-Write-Head 'Foreman'
+Write-Head (T 'head_foreman')
 if ($live) {
     $fmPort = [int]$live.port
     $own = Read-JsonFile $fmRunFile
     $startedByUs = $own -and ([int]$own.pid -eq [int]$live.pid) -and (Test-SameProc ([int]$own.pid) $own.startTime)
-    $by = 'started by an earlier launch.ps1'
-    if (-not $startedByUs) { $by = 'not started by launch.ps1; stop.ps1 leaves it alone' }
-    Write-Kv 'reusing' "pid $($live.pid)  ws://127.0.0.1:$fmPort  backend $($live.backend)  ($by)" 'Green'
-    if ($portGiven -and $fmPort -ne $Port) { Write-Warn2 "-Port $Port ignored: profile '$ForemanProfile' is already served on $fmPort" }
-    if ($live.backend -and $live.backend -ne $Backend) { Write-Warn2 "profile '$ForemanProfile' runs the $($live.backend) backend (asked for $Backend); stop it first to switch" }
+    $by = T 'reuse_ours'
+    if (-not $startedByUs) { $by = T 'reuse_other' }
+    Write-Kv 'reusing' (T 'kv_reusing' @{ pid = $live.pid; port = $fmPort; backend = $live.backend; by = $by }) 'Green'
+    if ($portGiven -and $fmPort -ne $Port) { Write-Warn2 (T 'warn_port' @{ asked = $Port; profile = $ForemanProfile; actual = $fmPort }) }
+    if ($live.backend -and $live.backend -ne $Backend) { Write-Warn2 (T 'warn_backend' @{ profile = $ForemanProfile; running = $live.backend; asked = $Backend }) }
     if ($Reset -or $showcaseOn -or $repoPaths.Count) {
-        if ($Reset) { Write-Warn2 '-Reset ignored for a running Foreman (tools\stop.ps1 -Foreman first)' }
+        if ($Reset) { Write-Warn2 (T 'warn_reset') }
         foreach ($rp in $repoPaths) {
             $r = & $node.Source (Join-Path $L.Tools 'foremancli.mjs') repo-add $rp --port $fmPort 2>$null | Out-String
-            if ($LASTEXITCODE -eq 0) { Write-Kv 'repo' "added $rp" } else { Write-Warn2 "repo.add $rp failed: $r" }
+            if ($LASTEXITCODE -eq 0) { Write-Kv 'repo' (T 'kv_repo_added' @{ path = $rp }) } else { Write-Warn2 (T 'warn_repo' @{ path = $rp; detail = $r }) }
         }
     }
     $fmInfo = [ordered]@{ started = $false; reused = $true; ownedByLauncher = [bool]$startedByUs; pid = [int]$live.pid; port = $fmPort; backend = $live.backend; profile = $ForemanProfile; home = $AgentHome; log = $null }
     if ($own -and $startedByUs) { $fmInfo.log = $own.log }
 } elseif ($NoForeman) {
     $fmPort = $Port
-    Write-Kv 'skipped' "-NoForeman: the game will look for a Foreman on port $fmPort" 'DarkGray'
+    Write-Kv 'skipped' (T 'kv_skipped' @{ port = $fmPort }) 'DarkGray'
     $fmInfo = [ordered]@{ started = $false; reused = $false; pid = $null; port = $fmPort; profile = $ForemanProfile; home = $AgentHome }
 } else {
     $fmPort = $Port
@@ -194,7 +203,7 @@ if ($live) {
     if ($owner -or (Test-PortOpen $Port)) {
         $who = 'another process'
         if ($owner) { $who = Get-ProcLabel $owner }
-        Fail "port $Port is already in use by $who. Another Foreman (other profile/home)? Use -Port N."
+        Fail (T 'fail_port_busy' @{ port = $Port; who = $who })
     }
     # foreman/node_modules is replaced only when no Foreman of this checkout is running on it
     $busy = @(Get-ChildItem -Path $L.Run -Filter 'foreman-*.json' -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '\.(spec|status)\.json$' } | ForEach-Object {
@@ -202,11 +211,11 @@ if ($live) {
         if ($rf -and $rf.pid -and (Test-SameProc ([int]$rf.pid) $rf.startTime)) { $rf }
     })
     if ($busy.Count -and (Test-Path (Join-Path $L.Foreman 'node_modules'))) {
-        Write-Warn2 "not checking foreman/ dependencies: Foreman '$($busy[0].profile)' of this checkout is running on them"
+        Write-Warn2 (T 'warn_deps' @{ profile = $busy[0].profile })
     } else {
         Install-NodeDeps $L.Foreman 'foreman'
     }
-    $fargs = @('--import', 'tsx', 'src/main.ts', '--backend', $Backend, '--profile', $ForemanProfile, '--home', $AgentHome, '--port', [string]$Port)
+    $fargs = @('--import', 'tsx', 'src/main.ts', '--backend', $Backend, '--profile', $ForemanProfile, '--home', $AgentHome, '--port', [string]$Port, '--locale', $Locale)
     if ($showcaseOn) {
         $fargs += @('--reset', '--showcase')
         if ($ShowcaseAt -eq 'late') { $fargs += 'late' }
@@ -230,7 +239,7 @@ if ($live) {
     } catch { Fail $_.Exception.Message ((Get-LogTail $fmLog 15) + (Get-LogTail $fmErr 15)) }
     $fmInfo = [ordered]@{ kind = 'foreman'; started = $true; reused = $false; ownedByLauncher = $true; pid = $bg.pid; startTime = $bg.start; wrapperPid = $bg.wrapperPid; wrapperStart = $bg.wrapperStart; port = $Port; backend = $Backend; profile = $ForemanProfile; home = $AgentHome; showcase = $ShowcaseAt; log = $fmLog; errLog = $fmErr; startedAt = $stamp; checkout = $Root }
     Write-JsonFile $fmRunFile $fmInfo
-    Write-Kv 'starting' "pid $($bg.pid)  backend $Backend  ws://127.0.0.1:$Port"
+    Write-Kv 'starting' (T 'kv_starting_fm' @{ pid = $bg.pid; backend = $Backend; port = $Port })
     $deadline = (Get-Date).AddSeconds(120)
     $up = $false
     while ((Get-Date) -lt $deadline) {
@@ -243,9 +252,9 @@ if ($live) {
         Remove-Item -Force $fmRunFile -ErrorAction SilentlyContinue
         Stop-OwnTree $bg.wrapperPid $bg.wrapperStart | Out-Null
         Stop-OwnTree $bg.pid $bg.start | Out-Null
-        Fail "the Foreman did not come up (see $fmLog)" ((Get-LogTail $fmLog 15) + (Get-LogTail $fmErr 15))
+        Fail (T 'fail_foreman' @{ log = $fmLog }) ((Get-LogTail $fmLog 15) + (Get-LogTail $fmErr 15))
     }
-    Write-Kv 'running' ("ws://127.0.0.1:$Port  ready in {0:N1} s" -f ((Get-Date) - $t0).TotalSeconds) 'Green'
+    Write-Kv 'running' (T 'kv_running_fm' @{ port = $Port; seconds = ('{0:N1}' -f ((Get-Date) - $t0).TotalSeconds) }) 'Green'
     }
 }
 if ($fmInfo.log) { Write-Kv 'log' $fmInfo.log }
@@ -267,15 +276,15 @@ if (-not ($DryRun -and -not $fmInfo.reused) -and (-not $NoForeman -or (Test-Port
         if ($f.message) { $line += " - $($f.message)" }
         Write-Kv 'status' $line $authColor
         $decs = @($st.openDecisions).Count
-        $what = "$($st.activeAgents)/$($st.agents) agents on shift, $($st.tasks) tasks, $decs open decisions"
-        if ($f.showcase) { $what += ', showcase held' }
+        $what = T 'state_line' @{ active = $st.activeAgents; agents = $st.agents; tasks = $st.tasks; decisions = $decs }
+        if ($f.showcase) { $what += T 'state_showcase' }
         Write-Kv 'state' $what
         $fmInfo.status = $f
     } else {
         $err = 'no answer'
         if ($st -and $st.error) { $err = $st.error }
-        if ($showcaseOn) { Fail "the Foreman did not reach the showcase state: $err" (Get-LogTail $fmInfo.log 15) }
-        Write-Warn2 "could not read the Foreman status: $err"
+        if ($showcaseOn) { Fail (T 'fail_showcase_state' @{ err = $err }) (Get-LogTail $fmInfo.log 15) }
+        Write-Warn2 (T 'warn_status' @{ err = $err })
     }
 }
 Save-Summary
@@ -287,11 +296,11 @@ if ($NoGame) {
     $summary.ok = $true
     Save-Summary
     Write-Host ''
-    Write-Host "Stop:  tools\stop.ps1 -Foreman" -ForegroundColor DarkGray
+    Write-Host (T 'stop_noforeman') -ForegroundColor DarkGray
     exit 0
 }
 
-Write-Head 'Minecraft'
+Write-Head (T 'head_minecraft')
 $gameInfo = $null
 $prev = Read-JsonFile $gameRunFile
 $liveGame = $null
@@ -303,13 +312,13 @@ if ($prev) {
 if (-not $liveGame) {
     # a game of this checkout started some other way (plain gradlew runClient) still owns mod/run
     $stray = Find-GameJvm $L
-    if ($stray) { Fail "a Minecraft client of this checkout is already running ($(Get-ProcLabel $stray.ProcessId)) but was not started by launch.ps1. Quit it first (node tools/devcli.mjs quit)." }
+    if ($stray) { Fail (T 'fail_stray' @{ who = (Get-ProcLabel $stray.ProcessId) }) }
 }
 
 if ($liveGame) {
-    Write-Kv 'running' "already running: pid $($liveGame.gamePid)  DevBridge :$($liveGame.devPort)  (one client per checkout)" 'Green'
-    if ([int]$liveGame.foremanPort -ne $fmPort) { Write-Warn2 "it was launched against Foreman port $($liveGame.foremanPort), not ${fmPort}: tools\stop.ps1 -Game, then launch again" }
-    if ([int]$liveGame.devPort -ne $DevPort) { Write-Warn2 "its DevBridge is on $($liveGame.devPort) (asked for $DevPort)" }
+    Write-Kv 'running' (T 'kv_game_running' @{ pid = $liveGame.gamePid; port = $liveGame.devPort }) 'Green'
+    if ([int]$liveGame.foremanPort -ne $fmPort) { Write-Warn2 (T 'warn_game_port' @{ launched = $liveGame.foremanPort; current = $fmPort }) }
+    if ([int]$liveGame.devPort -ne $DevPort) { Write-Warn2 (T 'warn_devport' @{ actual = $liveGame.devPort; asked = $DevPort }) }
     $gameInfo = [ordered]@{ started = $false; reused = $true; gamePid = $liveGame.gamePid; wrapperPid = $liveGame.wrapperPid; devPort = [int]$liveGame.devPort; foremanPort = [int]$liveGame.foremanPort; log = $liveGame.log }
     $DevPort = [int]$liveGame.devPort
 } else {
@@ -317,7 +326,7 @@ if ($liveGame) {
     if ($owner -or (Test-PortOpen $DevPort)) {
         $who = 'another process'
         if ($owner) { $who = Get-ProcLabel $owner }
-        Fail "DevBridge port $DevPort is already in use by $who (another game?). Use -DevPort N."
+        Fail (T 'fail_devport' @{ port = $DevPort; who = $who })
     }
     # Gradle daemon JVM args from mod/gradle.properties + a marker naming this checkout, so this
     # checkout gets its own daemon (stop.ps1 -StopDaemon can stop exactly that one).
@@ -343,6 +352,10 @@ if ($liveGame) {
     }
     # cmd.exe /s /c "<gradlew.bat> args": a .bat cannot be spawned directly; the arguments are fixed
     # (no user text), quoted per argument and passed verbatim
+    if (-not $DryRun) {
+        & $node.Source (Join-Path $PSScriptRoot 'locale.mjs') apply-lang --locale $Locale --mod $L.Mod | Out-Null
+        if ($LASTEXITCODE -ne 0) { Fail (T 'fail_locale') }
+    }
     $inner = Join-CmdArgs (@((Join-Path $L.Mod 'gradlew.bat')) + $gargs)
     if ($DryRun) {
         Write-Kv 'would run' "cmd /d /s /c `"$inner`"   (in mod/)" 'Yellow'
@@ -357,7 +370,7 @@ if ($liveGame) {
     } catch { Fail $_.Exception.Message (Get-LogTail $gameLog 15) }
     $gameInfo = [ordered]@{ kind = 'game'; started = $true; reused = $false; wrapperPid = $bg.wrapperPid; wrapperStart = $bg.wrapperStart; gradlePid = $bg.pid; gradleStart = $bg.start; gamePid = $null; gameStart = $null; devPort = $DevPort; foremanPort = $fmPort; dev = [bool]$Dev; log = $gameLog; errLog = $gameErr; checkout = $Root; marker = $L.Marker; gradleHome = $GradleHome }
     Write-JsonFile $gameRunFile $gameInfo
-    Write-Kv 'starting' "gradlew runClient (pid $($bg.pid); builds if needed)  DevBridge :$DevPort -> Foreman :$fmPort"
+    Write-Kv 'starting' (T 'kv_starting_game' @{ pid = $bg.pid; dev = $DevPort; fm = $fmPort })
     Write-Kv 'log' $gameLog
 }
 $summary.game = $gameInfo
@@ -366,7 +379,7 @@ Save-Summary
 if ($NoWait -and $gameInfo.started) {
     $summary.ok = $true
     Save-Summary
-    Write-Kv 'note' "-NoWait: not waiting for the world (node tools\devcli.mjs wait --port $DevPort)" 'DarkGray'
+    Write-Kv 'note' (T 'kv_nowait' @{ port = $DevPort }) 'DarkGray'
     exit 0
 }
 
@@ -383,13 +396,13 @@ while ((Get-Date) -lt $deadline) {
                 $gameInfo.gamePid = [int]$jvm.ProcessId
                 $gameInfo.gameStart = Get-ProcStart ([int]$jvm.ProcessId)
                 Write-JsonFile $gameRunFile $gameInfo
-                Write-Kv 'jvm' ("pid $($jvm.ProcessId)  (build done in {0:N0} s)" -f ((Get-Date) - $gStartT).TotalSeconds)
+                Write-Kv 'jvm' (T 'kv_jvm' @{ pid = $jvm.ProcessId; seconds = ('{0:N0}' -f ((Get-Date) - $gStartT).TotalSeconds) })
             }
         }
         if (-not (Test-SameProc $gameInfo.wrapperPid $gameInfo.wrapperStart) -and -not ($gameInfo.gamePid -and (Test-SameProc $gameInfo.gamePid $gameInfo.gameStart))) {
             Remove-Item -Force $gameRunFile -ErrorAction SilentlyContinue
             $tail = Get-LogTail $gameInfo.log 30
-            Fail 'gradlew runClient exited before the world was ready (build failure or crash).' $tail
+            Fail (T 'fail_game_exit') $tail
         }
     }
     if (Test-PortOpen $DevPort) {
@@ -401,21 +414,21 @@ while ((Get-Date) -lt $deadline) {
             $ready = $true
             $w = ''
             if ($ws.world) { $w = "world '$($ws.world.name)'" }
-            Write-Kv 'ready' ("{0}  {1} fps  in {2:N0} s" -f $w, $ws.fps, ((Get-Date) - $t0).TotalSeconds) 'Green'
+            Write-Kv 'ready' (T 'kv_ready' @{ world = $w; fps = $ws.fps; seconds = ('{0:N0}' -f ((Get-Date) - $t0).TotalSeconds) }) 'Green'
             $gameInfo.ready = $true
             break
         }
         $msg = 'not ready'
         if ($ws -and $ws.error) { $msg = $ws.error }
-        if ($msg -match 'hung') { Fail "the game is hung: $msg (tools\stop.ps1 -Game, then relaunch)" (Get-LogTail $gameInfo.log 20) }
+        if ($msg -match 'hung') { Fail (T 'fail_hung' @{ msg = $msg }) (Get-LogTail $gameInfo.log 20) }
     }
     if (((Get-Date) - $lastNote).TotalSeconds -ge 15) {
         $lastNote = Get-Date
-        Write-Kv '...' ("waiting for the world ({0:N0} s)" -f ((Get-Date) - $gStartT).TotalSeconds) 'DarkGray'
+        Write-Kv '...' (T 'kv_waiting' @{ seconds = ('{0:N0}' -f ((Get-Date) - $gStartT).TotalSeconds) }) 'DarkGray'
     }
     Start-Sleep -Milliseconds 1000
 }
-if (-not $ready) { Fail "the world was not ready after $TimeoutSec s (see $($gameInfo.log))" (Get-LogTail $gameInfo.log 20) }
+if (-not $ready) { Fail (T 'fail_world' @{ seconds = $TimeoutSec; log = $gameInfo.log }) (Get-LogTail $gameInfo.log 20) }
 if ($gameInfo.started) { Write-JsonFile $gameRunFile $gameInfo }
 
 $summary.game = $gameInfo
@@ -423,9 +436,9 @@ $summary.ok = $true
 Save-Summary
 
 Write-Host ''
-Write-Host 'Running.' -ForegroundColor Green
-Write-Host "  stop all      tools\stop.ps1            (game: quits + saves; Foreman: Ctrl+Break, state saved)" -ForegroundColor DarkGray
-Write-Host "  stop game     tools\stop.ps1 -Game      (or just close the window; agents keep working)" -ForegroundColor DarkGray
-Write-Host "  terminal UI   cd foreman; npm run tui -- --port $fmPort" -ForegroundColor DarkGray
+Write-Host (T 'running') -ForegroundColor Green
+Write-Host (T 'stop_all') -ForegroundColor DarkGray
+Write-Host (T 'stop_game') -ForegroundColor DarkGray
+Write-Host (T 'tui_hint' @{ port = $fmPort }) -ForegroundColor DarkGray
 Write-Host "  dev bridge    node tools\devcli.mjs state --port $DevPort" -ForegroundColor DarkGray
 exit 0

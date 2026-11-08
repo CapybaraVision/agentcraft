@@ -232,6 +232,17 @@ model it runs, like **Opus 5.5** or **GPT-6 Astra**, so a mixed team is easy to 
 `-ForemanArgs '--user-name','Sam'`, `AGENTCRAFT_USER_NAME`, or `{"userName": "Sam"}` in
 `~/.agentcraft/config.json`.
 
+**Language.** This fork's user-facing help, status, errors and launcher text default to Korean.
+English is a real setting, not a second copy of the UI:
+
+| Surface | Default | English |
+| --- | --- | --- |
+| Foreman `--help`, startup, config errors, toasts, permission-scope sentences | `ko` | `--locale en`, `AGENTCRAFT_LOCALE=en`, or `{"locale":"en"}` in `config.json` |
+| `tools\launch.ps1` / `tools\stop.ps1` / `node tools/unix.mjs` | `ko` | `-Locale en` or `--locale en` (also `AGENTCRAFT_LOCALE`) |
+| Minecraft block names, key binds, console, screen titles, task columns | game `lang:ko_kr` | Minecraft Options → Language → English, or `lang:en_us` in `mod/run/options.txt` |
+
+Flags, commands (`/help`, `--backend`), file names and protocol fields stay in English. A missing Korean string falls back to English. A new run directory copies `mod/run-template/options.txt`, which sets `lang:ko_kr`. The launcher changes `lang:` in an existing `mod/run/options.txt` once (other options stay), then writes `mod/run/agentcraft-locale.applied` and does not touch the language again, so a later choice in the game sticks. `-Locale en` on a first launch with no `options.txt` yet seeds English from the template. Wire errors from the Foreman protocol, generated code, and dev-bridge `error` text stay English. In-world HUD labels (task counts, the waiting badge, nameplate status, the decision-card header) follow the Minecraft language. The built-in sim story — task titles, the notes-tags question, and its choices — follows the Foreman locale. On startup the Foreman rewrites only those exact built-in sentences in the saved profile. It does not reset the profile or change a goal you typed, such as `/gamemode creative`. Use another `--profile` (for example `-Profile sim-ko`) for a fresh demo beside the current one. Restart the Foreman after this update so that rewrite runs; restarting only the game leaves the old Foreman process in place. With `--locale ko`, Claude and Codex are told to write questions, options, and summaries in Korean while leaving code, paths, and commands in English.
+
 <br>
 
 ## Controls

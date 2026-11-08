@@ -2,8 +2,18 @@
 import type { Foreman } from '../foreman.js';
 import type { Goal, Task, Worktree } from '../protocol.js';
 import { truncate } from '../util/text.js';
-import { userName } from '../user.js';
+import { getLocale } from '../locale.js';
 import { isPrBranch, pullBriefs, type PullRequest } from '../pulls.js';
+import { userName } from '../user.js';
+
+function languageRules(): string {
+  if (getLocale() !== 'ko') return '';
+  return `
+Language
+- Write what ${userName()} reads in Korean: task titles, descriptions, questions, option labels, summaries, blocked reasons, and messages to ${userName()}.
+- Keep code, file paths, commands, flags, branch names, commit subjects, and identifiers in English (\`notes tags\`, src/tags.ts, --tag, status values).
+`;
+}
 
 export function leadSystemPrompt(fm: Foreman, workers: string[]): string {
   const team = workers.map((w) => `${fm.nameOf(w)} (id "${w}")`).join(', ');
@@ -21,7 +31,7 @@ Rules
 - Never push, publish or deploy. Code merges only when ${userName()} approves a merge decision.
 - Review requests: you get the diff and the test result. If the work meets the task, call request_merge(task_id, summary). Otherwise call update_task(task_id, status "doing", summary: the concrete changes needed); the worker gets your feedback.
 - Talk to workers with send_message (short). End your turn as soon as the current job is done.
-`.trim();
+${languageRules()}`.trim();
 }
 
 export function workerSystemPrompt(fm: Foreman, agentId: string, wt: Worktree): string {
@@ -39,7 +49,7 @@ How to work
 - Never git push, never install global tools, never change files outside your worktree. Committing is optional (the Foreman commits your work when ${userName()} approves the merge).
 - Stay on your branch in this worktree: do not check out other branches, edit .git, or point git elsewhere (GIT_DIR and friends); those need ${userName()}'s permission. Your commits are made as AgentCraft ${fm.nameOf(agentId)} and are never signed (no -S).
 - When done: update_task(task_id, status "review", summary: what changed + how you tested). If you cannot finish: update_task(status "blocked", blocked_reason). Then end your turn.
-`.trim();
+${languageRules()}`.trim();
 }
 
 export function boardSummary(fm: Foreman, goalId?: string): string {

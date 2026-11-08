@@ -521,10 +521,10 @@ final class TaskBoard {
 				case REVIEW -> col.needYou > 0 ? "waiting" : "thinking";
 				case DONE -> "done";
 			};
-			String label = listMode ? "TASKS" : col.col.label.toUpperCase(Locale.ROOT);
+			String label = columnTitle(col.col, listMode);
 			String cs = Integer.toString(col.count);
 			// an explicit "1 blocked" chip (not a red dot next to the count, which read as "4 blocked")
-			String bl = col.blocked > 0 ? col.blocked + " blocked" : "";
+			String bl = col.blocked > 0 ? dev.agentcraft.client.ui.UiText.or("agentcraft.wall.blocked_n", col.blocked + " blocked", col.blocked) : "";
 			if (!bl.isEmpty() && font.width(label) + font.width(cs) + font.width(bl) + 24 > col.w) {
 				bl = col.blocked + "!";
 			}
@@ -626,11 +626,20 @@ final class TaskBoard {
 
 	// ------------------------------------------------------------------ planning
 
+	/** Column header in the game language. An untranslated English label stays uppercase. */
+	static String columnTitle(Col col, boolean listMode) {
+		if (listMode) {
+			return dev.agentcraft.client.ui.UiText.or("agentcraft.wall.tasks", "TASKS");
+		}
+		String raw = dev.agentcraft.client.ui.UiText.or("agentcraft.wall." + col.card, col.label);
+		return raw.equals(col.label) ? raw.toUpperCase(Locale.ROOT) : raw;
+	}
+
 	/** Width of a slim empty lane: the widest header label with a "0" count. */
 	private static float emptyWidth(Font font) {
 		int w = 0;
 		for (Col c : Col.values()) {
-			w = Math.max(w, font.width(c.label.toUpperCase(Locale.ROOT)));
+			w = Math.max(w, font.width(columnTitle(c, false)));
 		}
 		return Math.max(48, w + font.width("0") + 14);
 	}
@@ -935,13 +944,13 @@ final class TaskBoard {
 			hint = t.id(); // the reason has its own lines above the footer
 		} else if (blocked) {
 			String why = t.blockedReason() == null ? "" : t.blockedReason().replace("`", "").strip();
-			hint = why.isEmpty() ? "blocked" : why;
+			hint = why.isEmpty() ? dev.agentcraft.client.ui.UiText.or("agentcraft.hud.blocked", "blocked") : why;
 			hintColor = error;
 		} else if (yours != null) {
 			hint = yours;
 			hintColor = UiStyle.CLAY_DARK;
 		} else if (t.ci() == CiStatus.FAIL && !done) {
-			hint = "CI failing";
+			hint = dev.agentcraft.client.ui.UiText.or("agentcraft.hud.ci_failing", "CI failing");
 			hintColor = error;
 		} else if (!pending.isEmpty() && !done) {
 			hint = "after " + String.join(", ", pending);

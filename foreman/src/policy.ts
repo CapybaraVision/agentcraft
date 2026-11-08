@@ -40,6 +40,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { GIT_REDIRECT_VARS } from './gitsafety.js';
+import { t } from './locale.js';
 import { isInsideOrEqual } from './util/fsx.js';
 
 export type Verdict =
@@ -100,24 +101,25 @@ export function exactKey(command: string): string {
   return `Bash:exact:${hashText(command)}`;
 }
 
-/** Plain-language scope of a rule key, shown on the permission prompt. */
+/** Plain-language scope of a rule key, shown on the permission prompt. Follows the Foreman locale. */
 export function describeRuleKey(key: string): string {
   let m: RegExpExecArray | null;
-  if (key.startsWith('Bash:exact:')) return 'only this exact command';
+  if (key.startsWith('Bash:exact:')) return t('rule_exact');
   if ((m = /^Bash:outside:(.+?):(r|w|x)(tree)?:(.*)$/.exec(key))) {
-    const verb = m[2] === 'r' ? 'reading' : m[2] === 'w' ? 'writing' : 'running';
-    return m[3] ? `${m[1]} ${m[2] === 'r' ? 'reading' : 'changing'} everything under ${m[4]}` : `${m[1]} ${verb} files in ${m[4]}`;
+    const mode = m[2] === 'r' ? 'r' : m[2] === 'w' ? 'w' : 'x';
+    const id = m[3] ? (mode === 'r' ? 'rule_outside_tree_read' : 'rule_outside_tree_change') : `rule_outside_files_${mode}`;
+    return t(id, { cmd: m[1]!, path: m[4]! });
   }
-  if ((m = /^Bash:net:(.+?):(.*)$/.exec(key))) return `${m[1]} network access to ${m[2]}`;
-  if ((m = /^Bash:cd:(.*)$/.exec(key))) return `changing directory to ${m[1]}`;
-  if ((m = /^Bash:git (checkout|switch):(.*)$/.exec(key))) return `git ${m[1]} to exactly ${m[2] || '(no target)'}`;
-  if ((m = /^Bash:npx (.*)$/.exec(key))) return `\`npx ${m[1]}\` even when that downloads it from the npm registry (paths outside still ask)`;
-  if ((m = /^Bash:(vite|webpack) serve$/.exec(key))) return `starting the ${m[1]} dev server (it listens on a local port)`;
-  if ((m = /^(\w+):\.git:(.*)$/.exec(key))) return `${m[1]} of ${m[2]} (git internals)`;
-  if ((m = /^(Glob|Grep):pattern:/.exec(key))) return `${m[1]} with only this exact pattern`;
-  if ((m = /^Bash:(.*)$/.exec(key))) return `\`${m[1]}\` inside this agent's worktree (paths outside still ask)`;
-  if ((m = /^(Read|Grep|Glob|LS|NotebookRead):tree:(.*)$/.exec(key))) return `${m[1]} under ${m[2]}`;
-  if ((m = /^(\w+):(.*)$/.exec(key))) return `${m[1]} in ${m[2]}`;
+  if ((m = /^Bash:net:(.+?):(.*)$/.exec(key))) return t('rule_net', { cmd: m[1]!, host: m[2]! });
+  if ((m = /^Bash:cd:(.*)$/.exec(key))) return t('rule_cd', { dir: m[1]! });
+  if ((m = /^Bash:git (checkout|switch):(.*)$/.exec(key))) return t('rule_git', { sub: m[1]!, target: m[2] || '(no target)' });
+  if ((m = /^Bash:npx (.*)$/.exec(key))) return t('rule_npx', { cmd: `npx ${m[1]}` });
+  if ((m = /^Bash:(vite|webpack) serve$/.exec(key))) return t('rule_serve', { name: m[1]! });
+  if ((m = /^(\w+):\.git:(.*)$/.exec(key))) return t('rule_git_internal', { tool: m[1]!, path: m[2]! });
+  if ((m = /^(Glob|Grep):pattern:/.exec(key))) return t('rule_pattern', { tool: m[1]! });
+  if ((m = /^Bash:(.*)$/.exec(key))) return t('rule_bash', { cmd: m[1]! });
+  if ((m = /^(Read|Grep|Glob|LS|NotebookRead):tree:(.*)$/.exec(key))) return t('rule_tree', { tool: m[1]!, path: m[2]! });
+  if ((m = /^(\w+):(.*)$/.exec(key))) return t('rule_generic', { tool: m[1]!, path: m[2]! });
   return key;
 }
 
@@ -1791,6 +1793,12 @@ function classifyWords(cmd: string, cmdWord: string, rest: string[], sc: SegCtx,
     }
     target ??= positional[0];
     if (!target) return exact(env, `${cmd} without a file to write`);
+    // posix path.resolve joins "C:/Windows/x.txt" onto the worktree, so a Linux run
+    // would allow a PowerShell write that Windows treats as outside. Ask for a drive
+    // or UNC target off win32. On Windows, path.resolve below is unchanged.
+    if (process.platform !== 'win32' && (/^[A-Za-z]:[\\/]/.test(target) || /^\\\\[^\\]+\\[^\\]+/.test(target))) {
+      return exact(env, `${cmd} writes a Windows path outside the worktree: ${target}`);
+    }
     return merge(pathAsks([isPathCandidate(target, true) ? target : `./${target}`], 'w', sc), ok(`${cmd} inside worktree`, false));
   }
   if (WRITE_CMDS.has(cmd)) {

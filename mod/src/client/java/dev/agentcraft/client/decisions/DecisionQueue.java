@@ -73,13 +73,13 @@ public final class DecisionQueue {
 		return -1;
 	}
 
-	/** Human label of a kind: "question", "permission", "merge review". */
+	/** Human label of a kind: "question", "permission", "merge review". Follows the game language. */
 	public static String kindLabel(DecisionKind k) {
 		return switch (k) {
-			case PERMISSION -> "permission";
-			case MERGE -> "merge review";
-			case QUESTION -> "question";
-			default -> "decision";
+			case PERMISSION -> dev.agentcraft.client.ui.UiText.or("agentcraft.decision.permission", "permission");
+			case MERGE -> dev.agentcraft.client.ui.UiText.or("agentcraft.decision.merge", "merge review");
+			case QUESTION -> dev.agentcraft.client.ui.UiText.or("agentcraft.decision.question", "question");
+			default -> dev.agentcraft.client.ui.UiText.or("agentcraft.decision.decision", "decision");
 		};
 	}
 }

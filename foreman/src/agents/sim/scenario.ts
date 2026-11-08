@@ -14,6 +14,8 @@ import type { ShowcaseCheckpoint } from '../../config.js';
 import { PERMISSION_OPTIONS } from '../../protocol.js';
 import type { SimDirector } from './director.js';
 import * as E from './edits.js';
+import { getLocale } from '../../locale.js';
+import { P, q1IncludesCompleted, show } from './narrative.js';
 import { userName } from '../../user.js';
 
 export interface Beat {
@@ -23,15 +25,37 @@ export interface Beat {
   run(d: SimDirector): Promise<void>;
 }
 
-export const DEFAULT_SIM_GOAL = 'Add #tags to pocket-notes: parse them, filter with `notes list --tag`, and show a `notes tags` summary';
+export function currentSimGoal(): string {
+  return show(P.goal);
+}
 
-const Q1_OPTIONS = ['Only open notes (recommended)', 'Include completed notes'];
-export const q2Options = (id: string) => [`Close ${id} - I'll publish 0.3.0 myself (recommended)`, `Keep ${id} on the wall for later`];
+export function q2Options(id: string): string[] {
+  return [show(q2Close(id)), show(q2Keep(id))];
+}
+
+function q2Close(id: string): { en: string; ko: string } {
+  return {
+    en: `Close ${id} - I'll publish 0.3.0 myself (recommended)`,
+    ko: `${id}를 닫기 - 0.3.0은 제가 직접 게시합니다 (권장)`,
+  };
+}
+
+function q2Keep(id: string): { en: string; ko: string } {
+  return {
+    en: `Keep ${id} on the wall for later`,
+    ko: `${id}를 벽에 남겨 두기`,
+  };
+}
+
+function q2IsClose(id: string, option: string | undefined): boolean {
+  const close = q2Close(id);
+  return option === close.en || option === close.ko;
+}
 
 function q1IncludesDone(d: SimDirector): boolean {
   const id = d.vars['dec:q1'];
   const dec = typeof id === 'string' ? d.fm.decisions.get(id) : undefined;
-  return dec?.answer?.option === Q1_OPTIONS[1];
+  return q1IncludesCompleted(dec?.answer?.option);
 }
 
 export const BEATS: Beat[] = [
@@ -69,31 +93,43 @@ export const BEATS: Beat[] = [
     name: 'plan',
     async run(d) {
       await d.think('marlow', 'Splitting the goal into tasks with dependencies', 'desk', 1600);
-      const t1 = d.ensureTask('t1', { title: 'Explore repo & draft plan', createdBy: 'marlow', assignee: 'marlow' });
+      const t1 = d.ensureTask('t1', { title: show(P.t1), createdBy: 'marlow', assignee: 'marlow' });
       d.setTask('t1', 'doing');
-      const t2 = d.ensureTask('t2', { title: 'Tag parser module (src/tags.ts)', description: 'parseTags/hasTag/normalizeTag: lowercase, de-duplicated, "-" and "_" allowed, "issue#12" is not a tag. Unit tests.', deps: ['t1'], assignee: 'kit', createdBy: 'marlow', priority: 2 });
+      const t2 = d.ensureTask('t2', { title: show(P.t2), description: show(P.t2d), deps: ['t1'], assignee: 'kit', createdBy: 'marlow', priority: 2 });
       d.log('marlow', 'tool', `create_task "${t2.title}"`);
       await d.sleep(400);
-      const t3 = d.ensureTask('t3', { title: '`notes list --tag` + `notes tags`', description: 'Filter list by tag; new `tags` command with usage counts. Uses src/tags.ts.', deps: ['t2'], assignee: 'juniper', createdBy: 'marlow', priority: 1 });
+      const t3 = d.ensureTask('t3', { title: show(P.t3), description: show(P.t3d), deps: ['t2'], assignee: 'juniper', createdBy: 'marlow', priority: 1 });
       d.log('marlow', 'tool', `create_task "${t3.title}"`);
       await d.sleep(400);
-      const t4 = d.ensureTask('t4', { title: 'Highlight #tags in list output', description: 'Cyan tags when printing to a terminal; formatNote/formatList take {color}. No new dependencies.', deps: ['t1'], assignee: 'wren', createdBy: 'marlow', priority: 1 });
+      const t4 = d.ensureTask('t4', { title: show(P.t4), description: show(P.t4d), deps: ['t1'], assignee: 'wren', createdBy: 'marlow', priority: 1 });
       d.log('marlow', 'tool', `create_task "${t4.title}"`);
       await d.sleep(400);
-      const t5 = d.ensureTask('t5', { title: 'Tag edge cases: unicode & punctuation', description: 'Tests + fixes for #café, #crème-brûlée, trailing punctuation.', deps: ['t2'], assignee: 'kit', createdBy: 'marlow' });
+      const t5 = d.ensureTask('t5', { title: show(P.t5), description: show(P.t5d), deps: ['t2'], assignee: 'kit', createdBy: 'marlow' });
       d.log('marlow', 'tool', `create_task "${t5.title}"`);
       await d.sleep(400);
-      const t6 = d.ensureTask('t6', { title: 'README + help text for tags', description: 'Document tags; update `notes help`; enable colors on a TTY.', deps: ['t3', 't4'], assignee: 'tove', createdBy: 'marlow' });
+      const t6 = d.ensureTask('t6', { title: show(P.t6), description: show(P.t6d), deps: ['t3', 't4'], assignee: 'tove', createdBy: 'marlow' });
       d.log('marlow', 'tool', `create_task "${t6.title}"`);
       await d.sleep(400);
-      const t7 = d.ensureTask('t7', { title: 'Publish 0.3.0 to npm', description: `Needs ${userName()}: agents never publish or push.`, deps: ['t6'], createdBy: 'marlow', priority: -1 });
-      d.setTask('t7', 'blocked', { reason: `needs ${userName()}'s npm credentials - agents never publish` });
+      const t7 = d.ensureTask('t7', {
+        title: show(P.t7),
+        description: getLocale() === 'en'
+          ? `Needs ${userName()}: agents never publish or push.`
+          : `${userName()}의 확인이 필요합니다. 에이전트는 게시하거나 push하지 않습니다.`,
+        deps: ['t6'],
+        createdBy: 'marlow',
+        priority: -1,
+      });
+      d.setTask('t7', 'blocked', {
+        reason: getLocale() === 'en'
+          ? `needs ${userName()}'s npm credentials - agents never publish`
+          : `${userName()}의 npm 자격 증명이 필요합니다. 에이전트는 게시하지 않습니다`,
+      });
       d.log('marlow', 'tool', `create_task "${t7.title}" (blocked)`);
       await d.sleep(400);
-      const t8 = d.ensureTask('t8', { title: 'QA: full test run + CLI smoke on main', description: 'After merges: npm test on main, smoke the CLI with tagged notes, draft release notes.', deps: ['t5', 't6'], assignee: 'tove', createdBy: 'marlow' });
+      const t8 = d.ensureTask('t8', { title: show(P.t8), description: show(P.t8d), deps: ['t5', 't6'], assignee: 'tove', createdBy: 'marlow' });
       d.log('marlow', 'tool', `create_task "${t8.title}"`);
       await d.sleep(400);
-      const t9 = d.ensureTask('t9', { title: 'Stretch: shell completion for #tags', deps: ['t3'], assignee: 'rowan', createdBy: 'marlow', priority: -2 });
+      const t9 = d.ensureTask('t9', { title: show(P.t9), deps: ['t3'], assignee: 'rowan', createdBy: 'marlow', priority: -2 });
       d.log('marlow', 'tool', `create_task "${t9.title}"`);
       await d.sleep(500);
       const goal = d.fm.goal(d.goalId)!;
@@ -274,9 +310,9 @@ Rowan reviews every branch; then it goes to ${userName()} as a merge decision. N
       d.openDecision('q1', () => ({
         agentId: 'marlow',
         kind: 'question',
-        question: 'Should `notes tags` count tags on completed notes too?',
-        options: [...Q1_OPTIONS],
-        context: 'Juniper is building the `tags` command now. Open-only matches what `notes list` shows by default; `--all` could include done notes.',
+        question: show(P.q1),
+        options: [show(P.q1Open), show(P.q1Done)],
+        context: show(P.q1Context),
         taskId: d.task('t3').id,
       }));
       d.act('marlow', 'waiting_user', 'user', 'asking you about `notes tags`');
@@ -459,7 +495,7 @@ Rowan reviews every branch; then it goes to ${userName()} as a merge decision. N
         }));
         d.act('marlow', 'waiting_user', 'user', `asking you about ${t7.id}`);
         const q = await d.awaitDecision('q2');
-        const close = q.answer?.option === q2Options(t7.id)[0] || (!q.answer?.option && q.status === 'answered');
+        const close = q2IsClose(t7.id, q.answer?.option) || (!q.answer?.option && q.status === 'answered');
         if (close) {
           // cancelled tasks do not count towards the goal: the task graph completes it (100%)
           d.setTask('t7', 'cancelled', { summary: `${userName()} publishes 0.3.0 by hand.` });

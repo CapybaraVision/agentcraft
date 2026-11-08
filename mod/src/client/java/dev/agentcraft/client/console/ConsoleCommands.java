@@ -85,7 +85,18 @@ public final class ConsoleCommands {
 	public record Sound(@Nullable Boolean on) implements Intent {
 	}
 
-	public record Invalid(String error) implements Intent {
+	/**
+	 * {@code error} is the English sentence returned by {@code dev.console.parse}.
+	 * {@code key} plus {@code fmt} is what the console shows, via {@link ConsoleText#shown}.
+	 */
+	public record Invalid(String error, @Nullable String key, Object[] fmt) implements Intent {
+		public Invalid(String error) {
+			this(error, null, new Object[0]);
+		}
+
+		public static Invalid of(String key, String error, Object... fmt) {
+			return new Invalid(error, key, fmt == null ? new Object[0] : fmt);
+		}
 	}
 
 	public record Empty() implements Intent {
@@ -156,14 +167,14 @@ public final class ConsoleCommands {
 		String who = sp < 0 ? trimmed.substring(1) : trimmed.substring(1, sp);
 		String text = sp < 0 ? "" : trimmed.substring(sp + 1).strip();
 		if (who.isEmpty()) {
-			return new Invalid("type an agent name after @ (Tab completes)");
+			return Invalid.of("agentcraft.err.need_agent", "type an agent name after @ (Tab completes)");
 		}
 		String id = resolveAgent(who, s, true);
 		if (id == null) {
-			return new Invalid("no agent named @" + who + agentListSuffix(s));
+			return Invalid.of(s.agents().isEmpty() ? "agentcraft.err.no_agent_empty" : "agentcraft.err.no_agent", "no agent named @" + who + agentListSuffix(s), who, agentNames(s));
 		}
 		if (text.isEmpty()) {
-			return new Invalid("type a message for @" + displayName(id, s));
+			return Invalid.of("agentcraft.err.need_message", "type a message for @" + displayName(id, s), displayName(id, s));
 		}
 		return new Message(id, text);
 	}
@@ -186,8 +197,8 @@ public final class ConsoleCommands {
 			case "decide", "decisions", "d" -> new Decide(args.isEmpty() ? null : args.get(0));
 			case "clear", "cls" -> new Clear();
 			case "sound", "sounds", "mute" -> parseSound(cmd, args);
-			case "goal" -> rest.isEmpty() ? new Invalid("type the goal after /goal") : goal(rest, s);
-			default -> new Invalid("unknown command /" + cmd + " (/help lists them)");
+			case "goal" -> rest.isEmpty() ? Invalid.of("agentcraft.err.need_goal", "type the goal after /goal") : goal(rest, s);
+			default -> Invalid.of("agentcraft.err.unknown_command", "unknown command /" + cmd + " (/help lists them)", cmd);
 		};
 	}
 
@@ -201,7 +212,7 @@ public final class ConsoleCommands {
 		return switch (args.get(0).toLowerCase(Locale.ROOT)) {
 			case "on", "1", "yes" -> new Sound(true);
 			case "off", "0", "no" -> new Sound(false);
-			default -> new Invalid("/sound on or /sound off");
+			default -> Invalid.of("agentcraft.err.sound_usage", "/sound on or /sound off");
 		};
 	}
 
@@ -214,21 +225,21 @@ public final class ConsoleCommands {
 			return new Repos();
 		}
 		if (!sub.equals("add")) {
-			return new Invalid("usage: /repo add <path to a local git repo>");
+			return Invalid.of("agentcraft.err.repo_usage", "usage: /repo add <path to a local git repo>");
 		}
 		String path = rest.strip().substring(3).strip();
 		if (path.length() >= 2 && (path.startsWith("\"") && path.endsWith("\"") || path.startsWith("'") && path.endsWith("'"))) {
 			path = path.substring(1, path.length() - 1).strip();
 		}
 		if (path.isEmpty()) {
-			return new Invalid("usage: /repo add <path to a local git repo>");
+			return Invalid.of("agentcraft.err.repo_usage", "usage: /repo add <path to a local git repo>");
 		}
 		return new RepoAdd(path);
 	}
 
 	private static Intent parseAgentAction(String action, List<String> args, ForemanState s) {
 		if (args.isEmpty()) {
-			return new Invalid("usage: /" + action + " @agent" + (action.equals("spawn") ? " [task]" : ""));
+			return Invalid.of(action.equals("spawn") ? "agentcraft.err.spawn_usage" : "agentcraft.err.agent_usage", "usage: /" + action + " @agent" + (action.equals("spawn") ? " [task]" : ""), action);
 		}
 		List<String> ids = new ArrayList<>();
 		String arg = null;
@@ -238,7 +249,7 @@ public final class ConsoleCommands {
 				// spawn @kit t5: the task id
 				String tid = a.startsWith("#") ? a.substring(1) : a;
 				if (s.task(tid) == null) {
-					return new Invalid("no task " + tid + taskListSuffix(s));
+					return Invalid.of("agentcraft.err.no_task", "no task " + tid + taskListSuffix(s), tid, taskListSuffix(s));
 				}
 				arg = tid;
 				break;
@@ -246,7 +257,7 @@ public final class ConsoleCommands {
 			String bare = a.startsWith("@") ? a.substring(1) : a;
 			if (bare.equalsIgnoreCase("all") || bare.equalsIgnoreCase("everyone")) {
 				if (action.equals("spawn")) {
-					return new Invalid("spawn one agent at a time: /spawn @agent [task]");
+					return Invalid.of("agentcraft.err.spawn_one", "spawn one agent at a time: /spawn @agent [task]");
 				}
 				for (Agent ag : s.agents().values()) {
 					boolean wanted = switch (action) {
@@ -259,13 +270,13 @@ public final class ConsoleCommands {
 					}
 				}
 				if (ids.isEmpty()) {
-					return new Invalid("nobody to " + action);
+					return Invalid.of("agentcraft.err.nobody", "nobody to " + action, action);
 				}
 				continue;
 			}
 			String id = resolveAgent(bare, s, false);
 			if (id == null) {
-				return new Invalid("no agent named @" + bare + agentListSuffix(s));
+				return Invalid.of(s.agents().isEmpty() ? "agentcraft.err.no_agent_empty" : "agentcraft.err.no_agent", "no agent named @" + bare + agentListSuffix(s), bare, agentNames(s));
 			}
 			if (!ids.contains(id)) {
 				ids.add(id);
@@ -276,37 +287,37 @@ public final class ConsoleCommands {
 
 	private static Intent parseTask(List<String> args, ForemanState s) {
 		if (args.isEmpty()) {
-			return new Invalid("usage: /task <id> cancel|retry|prioritize [n]|reassign @agent");
+			return Invalid.of("agentcraft.err.task_usage", "usage: /task <id> cancel|retry|prioritize [n]|reassign @agent");
 		}
 		String tid = args.get(0).startsWith("#") ? args.get(0).substring(1) : args.get(0);
 		if (s.task(tid) == null) {
-			return new Invalid("no task " + tid + taskListSuffix(s));
+			return Invalid.of("agentcraft.err.no_task", "no task " + tid + taskListSuffix(s), tid, taskListSuffix(s));
 		}
 		if (args.size() < 2) {
-			return new Invalid("what should happen to " + tid + "? cancel, retry, prioritize [n] or reassign @agent");
+			return Invalid.of("agentcraft.err.task_what", "what should happen to " + tid + "? cancel, retry, prioritize [n] or reassign @agent", tid);
 		}
 		String action = args.get(1).toLowerCase(Locale.ROOT);
 		if (action.equals("prio") || action.equals("priority")) {
 			action = "prioritize";
 		}
 		if (!TASK_ACTIONS.contains(action)) {
-			return new Invalid("unknown task action '" + action + "': cancel, retry, prioritize [n] or reassign @agent");
+			return Invalid.of("agentcraft.err.task_action", "unknown task action '" + action + "': cancel, retry, prioritize [n] or reassign @agent", action);
 		}
 		String arg = null;
 		if (action.equals("reassign")) {
 			if (args.size() < 3) {
-				return new Invalid("reassign " + tid + " to whom? /task " + tid + " reassign @agent");
+				return Invalid.of("agentcraft.err.reassign_who", "reassign " + tid + " to whom? /task " + tid + " reassign @agent", tid, tid);
 			}
 			String bare = args.get(2).startsWith("@") ? args.get(2).substring(1) : args.get(2);
 			arg = resolveAgent(bare, s, false);
 			if (arg == null) {
-				return new Invalid("no agent named @" + bare + agentListSuffix(s));
+				return Invalid.of(s.agents().isEmpty() ? "agentcraft.err.no_agent_empty" : "agentcraft.err.no_agent", "no agent named @" + bare + agentListSuffix(s), bare, agentNames(s));
 			}
 		} else if (action.equals("prioritize") && args.size() >= 3) {
 			try {
 				arg = Integer.toString(Integer.parseInt(args.get(2)));
 			} catch (NumberFormatException e) {
-				return new Invalid("priority must be a whole number");
+				return Invalid.of("agentcraft.err.priority", "priority must be a whole number");
 			}
 		}
 		return new TaskAction(tid, action, arg);
@@ -318,13 +329,13 @@ public final class ConsoleCommands {
 			if (m != null && m.repoId() != null && m.worktree() != null) {
 				return new ShowDiff(m.repoId(), m.worktree(), m);
 			}
-			return new Invalid("usage: /diff <worktree> or /diff @agent" + worktreeListSuffix(s));
+			return Invalid.of("agentcraft.err.diff_usage", "usage: /diff <worktree> or /diff @agent" + worktreeListSuffix(s), worktreeListSuffix(s));
 		}
 		String target = args.get(0);
 		if (target.startsWith("@")) {
 			String id = resolveAgent(target.substring(1), s, false);
 			if (id == null) {
-				return new Invalid("no agent named " + target + agentListSuffix(s));
+				return Invalid.of(s.agents().isEmpty() ? "agentcraft.err.no_agent_empty" : "agentcraft.err.no_agent", "no agent named " + target + agentListSuffix(s), target.startsWith("@") ? target.substring(1) : target, agentNames(s));
 			}
 			Agent a = s.agent(id);
 			if (a == null || a.worktree() == null || a.repoId() == null) {
@@ -336,7 +347,7 @@ public final class ConsoleCommands {
 						}
 					}
 				}
-				return new Invalid(displayName(id, s) + " has no worktree right now");
+				return Invalid.of("agentcraft.err.no_worktree_agent", displayName(id, s) + " has no worktree right now", displayName(id, s));
 			}
 			return new ShowDiff(a.repoId(), a.worktree(), mergeFor(s, a.repoId(), a.worktree()));
 		}
@@ -352,7 +363,7 @@ public final class ConsoleCommands {
 		if (t != null && t.worktree() != null && t.repoId() != null) {
 			return new ShowDiff(t.repoId(), t.worktree(), mergeFor(s, t.repoId(), t.worktree()));
 		}
-		return new Invalid("no worktree '" + target + "'" + worktreeListSuffix(s));
+		return Invalid.of("agentcraft.err.no_worktree", "no worktree '" + target + "'" + worktreeListSuffix(s), target, worktreeListSuffix(s));
 	}
 
 	private static @Nullable Decision mergeFor(ForemanState s, String repoId, String worktree) {
@@ -367,7 +378,7 @@ public final class ConsoleCommands {
 	private static Intent parseAnswer(String rest, ForemanState s) {
 		List<Decision> open = DecisionQueue.open();
 		if (open.isEmpty()) {
-			return new Invalid("no decision is waiting");
+			return Invalid.of("agentcraft.err.no_decision_waiting", "no decision is waiting");
 		}
 		String r = rest.strip();
 		Decision d = null;
@@ -376,19 +387,22 @@ public final class ConsoleCommands {
 		Decision byId = first.isEmpty() ? null : s.decision(first.startsWith("#") ? first.substring(1) : first);
 		if (byId != null) {
 			if (!byId.isOpen()) {
-				return new Invalid(byId.id() + " is already " + byId.status().wire());
+				return Invalid.of("agentcraft.err.decision_closed", byId.id() + " is already " + byId.status().wire(), byId.id(), byId.status().wire());
 			}
 			d = byId;
 			r = sp < 0 ? "" : r.substring(sp + 1).strip();
 		} else if (first.matches("(?i)d\\d+")) {
-			return new Invalid("no decision " + first + " (open: " + ids(open) + ")");
+			return Invalid.of("agentcraft.err.no_decision", "no decision " + first + " (open: " + ids(open) + ")", first, ids(open));
 		} else if (open.size() == 1) {
 			d = open.get(0);
 		} else {
-			return new Invalid(open.size() + " decisions are open (" + ids(open) + "): /answer " + open.get(0).id() + " <n|option>");
+			return Invalid.of("agentcraft.err.many_decisions", open.size() + " decisions are open (" + ids(open) + "): /answer " + open.get(0).id() + " <n|option>", open.size(), ids(open), open.get(0).id());
 		}
 		if (r.isEmpty()) {
-			return new Invalid(optionsHint(d));
+			if (d.options().isEmpty()) {
+				return Invalid.of("agentcraft.err.answer_text", optionsHint(d), d.id());
+			}
+			return Invalid.of("agentcraft.err.options_hint", optionsHint(d), d.id(), optionList(d));
 		}
 		// option by number or label; the remainder is the text
 		int sp2 = indexOfSpace(r);
@@ -403,18 +417,18 @@ public final class ConsoleCommands {
 				text = r.substring(option.length()).strip();
 			}
 			if (option.equals(Protocol.REQUEST_CHANGES) && text.isEmpty()) {
-				return new Invalid("say what should change: /answer " + d.id() + " " + (d.options().indexOf(option) + 1) + " <feedback>");
+				return Invalid.of("agentcraft.err.need_feedback", "say what should change: /answer " + d.id() + " " + (d.options().indexOf(option) + 1) + " <feedback>", d.id(), d.options().indexOf(option) + 1);
 			}
 			return new Answer(d, option, text.isEmpty() ? null : text);
 		}
 		if (tok.matches("\\d+")) {
-			return new Invalid("option " + tok + " does not exist. " + optionsHint(d));
+			return Invalid.of("agentcraft.err.bad_option_n", "option " + tok + " does not exist. " + optionsHint(d), tok, d.id(), optionList(d));
 		}
 		if (d.kind() == DecisionKind.QUESTION) {
 			// free-text answer
 			return new Answer(d, null, r);
 		}
-		return new Invalid("'" + tok + "' is not an option. " + optionsHint(d));
+		return Invalid.of("agentcraft.err.bad_option", "'" + tok + "' is not an option. " + optionsHint(d), tok, d.id(), optionList(d));
 	}
 
 	/** Option label for a token: 1-based number, exact label, a unique prefix or a known alias. */
@@ -459,11 +473,8 @@ public final class ConsoleCommands {
 		return found;
 	}
 
-	private static String optionsHint(Decision d) {
-		if (d.options().isEmpty()) {
-			return "type your answer: /answer " + d.id() + " <text>";
-		}
-		StringBuilder b = new StringBuilder("options for " + d.id() + ": ");
+	private static String optionList(Decision d) {
+		StringBuilder b = new StringBuilder();
 		for (int i = 0; i < d.options().size(); i++) {
 			if (i > 0) {
 				b.append(", ");
@@ -471,6 +482,13 @@ public final class ConsoleCommands {
 			b.append(i + 1).append(' ').append(d.options().get(i));
 		}
 		return b.toString();
+	}
+
+	private static String optionsHint(Decision d) {
+		if (d.options().isEmpty()) {
+			return "type your answer: /answer " + d.id() + " <text>";
+		}
+		return "options for " + d.id() + ": " + optionList(d);
 	}
 
 	// ------------------------------------------------------------------ describe (live intent preview)
@@ -686,6 +704,22 @@ public final class ConsoleCommands {
 		}
 		Repo r = s.repo(repoId);
 		return r != null ? r.name() : repoId;
+	}
+
+	/** Comma-separated agent names for a localized error. Empty when nobody is on the roster. */
+	private static String agentNames(ForemanState s) {
+		if (s.agents().isEmpty()) {
+			return "";
+		}
+		StringBuilder b = new StringBuilder();
+		int i = 0;
+		for (Agent a : s.agents().values()) {
+			if (i++ > 0) {
+				b.append(", ");
+			}
+			b.append(a.name().toLowerCase(Locale.ROOT));
+		}
+		return b.toString();
 	}
 
 	private static String agentListSuffix(ForemanState s) {

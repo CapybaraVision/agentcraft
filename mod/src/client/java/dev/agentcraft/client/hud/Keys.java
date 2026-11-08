@@ -55,14 +55,14 @@ public final class Keys {
 	/** Spell out tiny punctuation glyphs; cut long names to 9 characters. */
 	public static String readable(String s) {
 		String word = switch (s) {
-			case "`" -> "Backtick";
-			case "'" -> "Quote";
-			case "´" -> "Accent";
-			case "," -> "Comma";
-			case "." -> "Period";
-			case ";" -> "Semicolon";
-			case ":" -> "Colon";
-			case "|" -> "Bar";
+			case "`" -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.backtick", "Backtick");
+			case "'" -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.quote", "Quote");
+			case "´" -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.accent", "Accent");
+			case "," -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.comma", "Comma");
+			case "." -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.period", "Period");
+			case ";" -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.semicolon", "Semicolon");
+			case ":" -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.colon", "Colon");
+			case "|" -> dev.agentcraft.client.ui.UiText.or("agentcraft.key.bar", "Bar");
 			default -> s;
 		};
 		return word.length() > 9 ? word.substring(0, 9) : word;

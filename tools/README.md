@@ -13,7 +13,7 @@ node tools/unix.mjs launch --repo /path/to/repo --use-claude-login
 node tools/unix.mjs stop                           # save/quit game, stop Foreman
 ```
 
-The launcher installs npm dependencies on first use, runs the Fabric development client,
+The launcher UI defaults to Korean (`--locale en` or `AGENTCRAFT_LOCALE=en` for English). It installs npm dependencies on first use, runs the Fabric development client,
 and waits for the studio world. It reuses a running Foreman or game from the same profile.
 Use `--dev` for mute/no focus/no notifications; `--no-game` or `--no-foreman` to run just
 one component; `--no-wait` to return immediately while Minecraft builds. Repeat

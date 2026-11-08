@@ -75,6 +75,7 @@ most ~100 ms of state, and interrupted agent turns resume on the next start.
 | flag / env | default | |
 | --- | --- | --- |
 | `--backend sim\|claude\|codex` / `AGENTCRAFT_BACKEND` | `claude` | codex: an all-Codex team |
+| `--locale ko\|en` / `AGENTCRAFT_LOCALE` / `config.json` `"locale"` | `ko` | help, status and Foreman errors. `en` is English. Flags and protocol fields stay English. Missing Korean keys fall back to English. |
 | `--lead-engine` / `--worker-engine` `claude\|codex` | the backend's | mixed teams, e.g. a Claude lead with Codex workers |
 | `--engines kit=codex,...` / `AGENTCRAFT_ENGINES` | | engine per agent |
 | `--codex-model`, `--codex-lead-model`, `--codex-worker-model`, `--codex-effort` | your Codex config | Codex models and reasoning effort |
