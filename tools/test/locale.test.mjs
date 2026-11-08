@@ -3,9 +3,32 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { applyGameLanguage, catalogKeys, normalizeLocale, translate } from '../locale.mjs';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+// fileURLToPath, not URL.pathname. On Windows pathname is "/C:/..." and
+// path.resolve treats the leading slash as "absolute on the current drive",
+// so the drive letter becomes a directory: C:\C:\Users\...
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/** Node's Windows fileURLToPath for a drive or UNC file URL. Platform-independent. */
+function windowsPathFromFileUrl(fileUrl) {
+  const url = new URL(fileUrl);
+  if (url.protocol !== 'file:') throw new Error(`not a file URL: ${fileUrl}`);
+  let pathname = url.pathname;
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    throw new Error(`bad file URL encoding: ${fileUrl}`);
+  }
+  if (url.hostname) return `\\\\${decodeURIComponent(url.hostname)}${pathname.replaceAll('/', '\\')}`;
+  if (!/^\/[A-Za-z]:\//.test(pathname)) throw new Error(`not a Windows drive file URL: ${fileUrl}`);
+  return pathname.slice(1).replaceAll('/', '\\');
+}
+
+function windowsCheckoutRoot(fileUrl) {
+  return path.win32.resolve(path.win32.dirname(windowsPathFromFileUrl(fileUrl)), '..', '..');
+}
 
 test('launcher catalogs share keys and Korean copy is Korean', () => {
   const { ko, en } = catalogKeys();
@@ -23,6 +46,25 @@ test('launcher catalogs share keys and Korean copy is Korean', () => {
   assert.match(enNode, /Node\.js 22\+/);
   assert.match(translate('ko', 'fail_node_missing'), /[가-힣]/);
   assert.match(translate('ko', 'running'), /실행/);
+});
+
+test('a Windows file URL is not resolved as a directory on the current drive', () => {
+  const fileUrl = 'file:///C:/Users/pop49/AppData/Local/Programs/AgentCraft/tools/test/locale.test.mjs';
+  const pathname = new URL(fileUrl).pathname;
+  assert.equal(pathname, '/C:/Users/pop49/AppData/Local/Programs/AgentCraft/tools/test/locale.test.mjs');
+  // path.win32 leaves the slash-rooted pathname as \C:\... On a C: cwd,
+  // path.resolve prefixes that drive and the open() path becomes C:\C:\...
+  const rooted = path.win32.normalize(path.win32.join(path.win32.dirname(pathname), '..', '..'));
+  assert.equal(rooted, '\\C:\\Users\\pop49\\AppData\\Local\\Programs\\AgentCraft');
+  const cwd = 'C:\\Users\\pop49\\AppData\\Local\\Programs\\AgentCraft\\tools';
+  const doubled = `${cwd.slice(0, 2)}\\${rooted.replace(/^\\+/, '')}`;
+  assert.equal(doubled, 'C:\\C:\\Users\\pop49\\AppData\\Local\\Programs\\AgentCraft');
+
+  const fixed = windowsCheckoutRoot(fileUrl);
+  assert.equal(fixed, 'C:\\Users\\pop49\\AppData\\Local\\Programs\\AgentCraft');
+  const lang = path.win32.join(fixed, 'mod', 'src', 'main', 'resources', 'assets', 'agentcraft', 'lang', 'en_us.json');
+  assert.equal(lang, 'C:\\Users\\pop49\\AppData\\Local\\Programs\\AgentCraft\\mod\\src\\main\\resources\\assets\\agentcraft\\lang\\en_us.json');
+  assert.equal(windowsPathFromFileUrl('file:///C:/Users/pop%2049/AgentCraft/tools/test/locale.test.mjs'), 'C:\\Users\\pop 49\\AgentCraft\\tools\\test\\locale.test.mjs');
 });
 
 test('Minecraft lang files cover the same keys and Korean UI strings are Korean', () => {
